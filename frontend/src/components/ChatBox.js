@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { Send, Paperclip, Image, X, Smile, MoreVertical } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import io from 'socket.io-client';

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import DashboardLayout from '../../components/layout/DashboardLayout';
-import { StatusBadge, PageLoading, EmptyState } from '../../components/ui';
-import api from '../../lib/api';
+import DashboardLayout from '../../../components/layout/DashboardLayout';
+import { StatusBadge, PageLoading, EmptyState } from '../../../components/ui';
+import api from '../../../lib/api';
 import { FolderOpen, Search, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 

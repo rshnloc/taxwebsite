@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import DashboardLayout from '../../../components/layout/DashboardLayout';
-import { StatusBadge, PageLoading, Modal } from '../..//../components/ui';
+import { StatusBadge, PageLoading, Modal } from '../../../components/ui';
 import api from '../../../lib/api';
 import { ArrowLeft, UserPlus, Download, Upload, MessageCircle, Clock, FileText, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
