@@ -1,8 +1,8 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 class ApiClient {
   constructor() {
-    this.baseURL = `${API_URL}/api`;
+    this.baseURL = API_URL ? `${API_URL}/api` : '/api';
   }
 
   getToken() {
