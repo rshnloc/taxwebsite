@@ -85,6 +85,12 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
+    const message = error?.message || '';
+    if (message.toLowerCase().includes('auth required') || message.toLowerCase().includes('authentication failed')) {
+      return res.status(503).json({
+        error: 'Database authentication failed. Please check server MongoDB credentials.',
+      });
+    }
     res.status(500).json({ error: error.message });
   }
 };
