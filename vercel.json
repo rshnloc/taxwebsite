@@ -1,6 +1,5 @@
 {
-  "framework": "nextjs",
-  "buildCommand": "npm run vercel-build",
+  "buildCommand": "npm --prefix frontend install --legacy-peer-deps && npm --prefix frontend run build",
   "outputDirectory": "frontend/.next",
   "installCommand": "npm install --legacy-peer-deps",
   "headers": [
