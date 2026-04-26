@@ -11,7 +11,7 @@ class AuthController {
 
         if (!$name) jsonResponse(['error' => 'Name is required'], 400);
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) jsonResponse(['error' => 'Valid email is required'], 400);
-        if (strlen($password) < 6) jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+        if ($passwordError = validatePasswordStrength($password)) jsonResponse(['error' => $passwordError], 400);
 
         $db = getDb();
         $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
@@ -26,6 +26,16 @@ class AuthController {
         // Activity log
         $db->prepare("INSERT INTO activity_logs (user_id, action, entity, entity_id) VALUES (?, 'User registered', 'user', ?)")
            ->execute([$userId, $userId]);
+
+        try {
+            Mailer::queueTemplate($db, 'user-registration', $email, $name, [
+                'user' => ['name' => $name, 'email' => $email],
+            ]);
+        } catch (Throwable $e) {
+            appLog('error', 'Failed to queue registration email', ['userId' => $userId, 'error' => $e->getMessage()]);
+        }
+
+        appLog('info', 'User registered', ['userId' => $userId, 'email' => $email]);
 
         $token = Auth::generateToken($userId);
         jsonResponse([
@@ -117,15 +127,22 @@ class AuthController {
         $stmt->execute([Auth::userId()]);
         $user = $stmt->fetch();
 
-        if (!password_verify($data['currentPassword'] ?? '', $user['password'])) {
+        $currentPassword = $data['currentPassword'] ?? $data['oldPassword'] ?? '';
+        if (!password_verify($currentPassword, $user['password'])) {
             jsonResponse(['error' => 'Current password is incorrect'], 400);
         }
 
         $newPass = $data['newPassword'] ?? '';
-        if (strlen($newPass) < 6) jsonResponse(['error' => 'Password must be at least 6 characters'], 400);
+        $confirmPassword = $data['confirmPassword'] ?? '';
+        if ($newPass !== $confirmPassword) jsonResponse(['error' => 'New password and confirm password do not match'], 400);
+        if ($newPass === $currentPassword) jsonResponse(['error' => 'New password must be different from current password'], 400);
+        if ($passwordError = validatePasswordStrength($newPass)) jsonResponse(['error' => $passwordError], 400);
 
         $hash = password_hash($newPass, PASSWORD_BCRYPT, ['cost' => 12]);
         $db->prepare("UPDATE users SET password = ? WHERE id = ?")->execute([$hash, Auth::userId()]);
+        $db->prepare("INSERT INTO activity_logs (user_id, action, entity, entity_id) VALUES (?, 'Password changed', 'user', ?)")
+           ->execute([Auth::userId(), Auth::userId()]);
+        appLog('info', 'Password changed', ['userId' => Auth::userId()]);
         jsonResponse(['message' => 'Password changed successfully']);
     }
 

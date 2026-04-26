@@ -164,16 +164,40 @@ class ApplicationController {
         $serviceId = $data['serviceId'] ?? null;
         if (!$serviceId) jsonResponse(['error' => 'Service ID required'], 400);
 
+        $serviceStmt = $db->prepare("SELECT * FROM services WHERE id = ? AND is_active = 1");
+        $serviceStmt->execute([$serviceId]);
+        $service = $serviceStmt->fetch();
+        if (!$service) jsonResponse(['error' => 'Service not found'], 404);
+
+        $pricing = normalizeServicePricing([
+            'basePrice' => $service['pricing_base_price'],
+            'gstPercent' => $service['pricing_gst_percent'],
+            'totalPrice' => $service['pricing_total_price'],
+            'isCustom' => $service['pricing_is_custom'],
+            'pricingNote' => $service['pricing_note'],
+        ]);
+
         // Generate application ID
         $stmt = $db->query("SELECT COUNT(*) FROM applications");
         $count = (int)$stmt->fetchColumn();
         $appId = 'HS-' . str_pad($count + 1001, 6, '0', STR_PAD_LEFT);
 
-        $formData = isset($data['formData']) ? (is_string($data['formData']) ? $data['formData'] : json_encode($data['formData'])) : '{}';
+        $formPayload = isset($data['formData']) ? (is_array($data['formData']) ? $data['formData'] : (json_decode($data['formData'], true) ?: [])) : [];
+        $validatedFieldValues = validateApplicationFormData($db, $serviceId, $formPayload);
+        $formData = json_encode($formPayload);
 
-        $stmt = $db->prepare("INSERT INTO applications (application_id, client_id, service_id, form_data) VALUES (?,?,?,?)");
-        $stmt->execute([$appId, Auth::userId(), $serviceId, $formData]);
+        $stmt = $db->prepare("INSERT INTO applications (application_id, client_id, service_id, form_data, payment_amount, payment_gst, payment_total) VALUES (?,?,?,?,?,?,?)");
+        $stmt->execute([
+            $appId,
+            Auth::userId(),
+            $serviceId,
+            $formData,
+            $pricing['basePrice'],
+            round($pricing['totalPrice'] - $pricing['basePrice'], 2),
+            $pricing['totalPrice'],
+        ]);
         $id = (int)$db->lastInsertId();
+        saveApplicationFieldValues($db, $id, $validatedFieldValues);
 
         // Timeline entry
         $db->prepare("INSERT INTO application_timeline (application_id, status, message, updated_by) VALUES (?, 'submitted', 'Application submitted', ?)")
@@ -189,13 +213,26 @@ class ApplicationController {
         $admins = $db->query("SELECT id FROM users WHERE role = 'admin' AND is_active = 1")->fetchAll();
         $userName = Auth::user()['name'];
         foreach ($admins as $admin) {
-            $db->prepare("INSERT INTO notifications (user_id, title, message, type, link) VALUES (?, 'New Application', ?, 'application', ?)")
-               ->execute([$admin['id'], "New application $appId submitted by $userName", "/admin/applications/$id"]);
+            createNotification($db, $admin['id'], 'New Application', "New application $appId submitted by $userName", 'application', "/admin/applications/$id", 'in_app', ['applicationId' => $id]);
+        }
+
+        $serviceName = $service['name'];
+        try {
+            Mailer::queueTemplate($db, 'registration-service-request', Auth::user()['email'], Auth::user()['name'], [
+                'user' => Auth::user(),
+                'applicationId' => $appId,
+                'serviceName' => $serviceName,
+                'status' => 'submitted',
+            ]);
+        } catch (Throwable $e) {
+            appLog('error', 'Failed to queue service request email', ['applicationId' => $appId, 'error' => $e->getMessage()]);
         }
 
         // Activity log
-        $db->prepare("INSERT INTO activity_logs (user_id, action, entity, entity_id) VALUES (?, 'Application created', 'application', ?)")
-           ->execute([Auth::userId(), $id]);
+        $db->prepare("INSERT INTO activity_logs (user_id, action, entity, entity_id, details) VALUES (?, 'Application created', 'application', ?, ?)")
+           ->execute([Auth::userId(), $id, json_encode(['serviceId' => $serviceId, 'pricing' => $pricing])]);
+
+        appLog('info', 'Application created', ['applicationId' => $appId, 'serviceId' => (int)$serviceId, 'userId' => Auth::userId()]);
 
         $stmt = $db->prepare("SELECT * FROM applications WHERE id = ?");
         $stmt->execute([$id]);
@@ -250,8 +287,22 @@ class ApplicationController {
            ->execute([$id, $status, $message, Auth::userId()]);
 
         // Notify client
-        $db->prepare("INSERT INTO notifications (user_id, title, message, type, link) VALUES (?, 'Application Update', ?, 'application', ?)")
-           ->execute([$a['client_id'], "Your application {$a['application_id']} status changed to $status", "/dashboard/applications/$id"]);
+        createNotification($db, $a['client_id'], 'Application Update', "Your application {$a['application_id']} status changed to $status", 'application', "/dashboard/applications/$id", 'in_app', ['applicationId' => $id, 'status' => $status]);
+
+        $clientStmt = $db->prepare("SELECT name, email FROM users WHERE id = ?");
+        $clientStmt->execute([$a['client_id']]);
+        $client = $clientStmt->fetch();
+        if ($client) {
+            try {
+                Mailer::queueTemplate($db, 'application-status-update', $client['email'], $client['name'], [
+                    'applicationId' => $a['application_id'],
+                    'status' => $status,
+                    'message' => $message,
+                ]);
+            } catch (Throwable $e) {
+                appLog('error', 'Failed to queue application update email', ['applicationId' => $id, 'error' => $e->getMessage()]);
+            }
+        }
 
         $stmt = $db->prepare("SELECT * FROM applications WHERE id = ?");
         $stmt->execute([$id]);
@@ -276,8 +327,7 @@ class ApplicationController {
            ->execute([$id, $a['status'], 'Employee assigned', Auth::userId()]);
 
         // Notify employee
-        $db->prepare("INSERT INTO notifications (user_id, title, message, type, link) VALUES (?, 'New Task Assigned', ?, 'task', ?)")
-           ->execute([$employeeId, "You have been assigned application {$a['application_id']}", "/employee/applications/$id"]);
+        createNotification($db, $employeeId, 'New Task Assigned', "You have been assigned application {$a['application_id']}", 'task', "/employee/applications/$id", 'in_app', ['applicationId' => $id]);
 
         $stmt = $db->prepare("SELECT * FROM applications WHERE id = ?");
         $stmt->execute([$id]);

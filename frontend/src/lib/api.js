@@ -30,10 +30,25 @@ class ApiClient {
     }
 
     const response = await fetch(`${this.baseURL}${endpoint}`, config);
+
+    // Guard against HTML/error pages returned by hosting rewrite rules
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const responseText = await response.text();
+      const looksLikeHtml = /<(!doctype|html|head|body)\b/i.test(responseText);
+      if (looksLikeHtml) {
+        throw new Error('API returned an HTML page instead of JSON. On cPanel, make sure the root `.htaccess` excludes `/api/` from frontend rewrites.');
+      }
+      if (!response.ok) {
+        throw new Error(`Server error (${response.status}). Please try again.`);
+      }
+      throw new Error('API returned an unexpected non-JSON response.');
+    }
+
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || 'Something went wrong');
+      throw new Error(data.error || data.message || 'Something went wrong');
     }
 
     return data;
@@ -123,6 +138,39 @@ class ApiClient {
   async getEmployeeDashboard() { return this.request('/dashboard/employee'); }
   async getClientDashboard() { return this.request('/dashboard/client'); }
   async getReports(params = '') { return this.request(`/dashboard/reports?${params}`); }
+
+  // Roles & Permissions
+  async getRoles() { return this.request('/roles'); }
+  async getRoleById(id) { return this.request(`/roles/${id}`); }
+  async createRole(data) { return this.request('/roles', { method: 'POST', body: data }); }
+  async updateRole(id, data) { return this.request(`/roles/${id}`, { method: 'PUT', body: data }); }
+  async deleteRole(id) { return this.request(`/roles/${id}`, { method: 'DELETE' }); }
+  async getPermissions() { return this.request('/permissions'); }
+  async updateRolePermissions(id, permissionIds) { return this.request(`/roles/${id}/permissions`, { method: 'PUT', body: { permissionIds } }); }
+  async assignUserRole(userId, roleId) { return this.request(`/users/${userId}/role`, { method: 'PUT', body: { roleId } }); }
+
+  // Client Types
+  async getClientTypes() { return this.request('/client-types'); }
+  async createClientType(data) { return this.request('/client-types', { method: 'POST', body: data }); }
+  async updateClientType(id, data) { return this.request(`/client-types/${id}`, { method: 'PUT', body: data }); }
+  async deleteClientType(id) { return this.request(`/client-types/${id}`, { method: 'DELETE' }); }
+  async assignClientType(userId, clientTypeId) { return this.request(`/users/${userId}/client-type`, { method: 'PUT', body: { clientTypeId } }); }
+
+  // RM Assignments
+  async getRMAssignments() { return this.request('/rm/assignments'); }
+  async getRMList() { return this.request('/rm/list'); }
+  async getMyRMClients() { return this.request('/rm/my-clients'); }
+  async assignRM(data) { return this.request('/rm/assignments', { method: 'POST', body: data }); }
+  async updateRMAssignment(id, data) { return this.request(`/rm/assignments/${id}`, { method: 'PUT', body: data }); }
+  async unassignRM(id) { return this.request(`/rm/assignments/${id}`, { method: 'DELETE' }); }
+
+  // Document uploads
+  async uploadDocuments(applicationId, formData) {
+    return this.request(`/applications/${applicationId}/documents/upload`, { method: 'POST', body: formData, headers: {} });
+  }
+  async getDocuments(applicationId) { return this.request(`/applications/${applicationId}/documents`); }
+  async getDocumentPassword(docId) { return this.request(`/documents/${docId}/password`); }
+  async updateDocumentStatus(docId, status) { return this.request(`/documents/${docId}/status`, { method: 'PUT', body: { status } }); }
 }
 
 const api = new ApiClient();

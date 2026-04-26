@@ -11,6 +11,9 @@ return [
     'DB_PASS' => '',
     'JWT_SECRET' => 'helpshack_jwt_secret_key_change_in_production',
     'JWT_EXPIRES_IN' => 604800, // 7 days in seconds
-    'FRONTEND_URL' => 'https://frontend-pi-gilt-47.vercel.app',
+    'FRONTEND_URL' => 'https://tax.careerxera.com',
+    'LOG_PATH' => __DIR__ . '/logs/app.log',
+    'MAIL_FROM_EMAIL' => 'no-reply@tax.careerxera.com',
+    'MAIL_FROM_NAME' => 'Helpshack',
     'APP_ENV' => 'production',
 ];

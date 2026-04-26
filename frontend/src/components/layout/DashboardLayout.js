@@ -5,7 +5,7 @@ import { useTheme } from '../../context/ThemeContext';
 import {
   LayoutDashboard, Users, FileText, ClipboardList, Settings, LogOut,
   MessageSquare, Receipt, Bell, BarChart3, Sun, Moon, ChevronLeft,
-  Briefcase, FolderOpen, CreditCard, User, Building2
+  Briefcase, FolderOpen, CreditCard, User, Building2, Shield, UserCheck
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -19,6 +19,9 @@ const adminLinks = [
   { href: '/admin/invoices', label: 'Invoices', icon: Receipt },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { href: '/admin/chat', label: 'Messages', icon: MessageSquare },
+  { href: '/admin/roles', label: 'Roles & Permissions', icon: Shield },
+  { href: '/admin/client-types', label: 'Client Types', icon: Building2 },
+  { href: '/admin/rm-assignments', label: 'RM Assignments', icon: UserCheck },
 ];
 
 const employeeLinks = [

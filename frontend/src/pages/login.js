@@ -19,6 +19,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const user = await login(email, password);
+      if (!user?.role) {
+        throw new Error('Login succeeded but user details are incomplete. Please check the API response.');
+      }
       toast.success('Welcome back!');
       switch (user.role) {
         case 'admin': router.push('/admin'); break;

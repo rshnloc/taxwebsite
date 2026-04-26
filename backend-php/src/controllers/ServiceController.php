@@ -1,6 +1,23 @@
 <?php
 class ServiceController {
 
+    private static function validatePayload($data, $isUpdate = false) {
+        if (!$isUpdate || array_key_exists('name', $data)) {
+            $name = trim((string)($data['name'] ?? ''));
+            if ($name === '') {
+                throw new InvalidArgumentException('Service name is required');
+            }
+        }
+
+        if (isset($data['pricing'])) {
+            normalizeServicePricing($data['pricing']);
+        }
+
+        if (isset($data['dynamicFields'])) {
+            validateDynamicFieldsDefinition($data['dynamicFields']);
+        }
+    }
+
     // GET /api/services
     public static function getServices() {
         $db = getDb();
@@ -30,30 +47,52 @@ class ServiceController {
         jsonResponse(['service' => formatService($service, $db)]);
     }
 
+    // GET /api/services/:slug/config
+    public static function getServiceConfig($slug) {
+        $db = getDb();
+        $stmt = $db->prepare("SELECT * FROM services WHERE slug = ? AND is_active = 1");
+        $stmt->execute([$slug]);
+        $service = $stmt->fetch();
+        if (!$service) jsonResponse(['error' => 'Service not found'], 404);
+
+        $formatted = formatService($service, $db);
+        jsonResponse([
+            'serviceId' => $formatted['id'],
+            'slug' => $formatted['slug'],
+            'pricing' => $formatted['pricing'],
+            'documents' => $formatted['requiredDocuments'] ?? [],
+            'dynamicFields' => $formatted['dynamicFields'] ?? [],
+        ]);
+    }
+
     // POST /api/services
     public static function createService() {
         Auth::protect(); Auth::authorize('admin');
         $data = getJsonInput();
         $db = getDb();
 
+        self::validatePayload($data);
+
         $name = $data['name'] ?? '';
         $slug = preg_replace('/[^a-z0-9]+/', '-', strtolower($name));
         $slug = trim($slug, '-');
 
+        $pricing = normalizeServicePricing($data['pricing'] ?? []);
+
         $stmt = $db->prepare("INSERT INTO services (name, slug, short_description, description, icon, category, pricing_base_price, pricing_gst_percent, pricing_total_price, pricing_is_custom, pricing_note, timeline, is_popular, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-        $pricing = $data['pricing'] ?? [];
         $stmt->execute([
             $name, $slug,
             $data['shortDescription'] ?? '', $data['description'] ?? '',
             $data['icon'] ?? 'FileText', $data['category'] ?? 'other',
-            $pricing['basePrice'] ?? 0, $pricing['gstPercent'] ?? 18, $pricing['totalPrice'] ?? 0,
-            ($pricing['isCustom'] ?? false) ? 1 : 0, $pricing['pricingNote'] ?? null,
+            $pricing['basePrice'], $pricing['gstPercent'], $pricing['totalPrice'],
+            $pricing['isCustom'] ? 1 : 0, $pricing['pricingNote'] ?: null,
             $data['timeline'] ?? '7-10 working days',
             ($data['isPopular'] ?? false) ? 1 : 0, $data['sortOrder'] ?? 0,
         ]);
         $id = (int)$db->lastInsertId();
 
         self::saveRelated($db, $id, $data);
+        appLog('info', 'Service created', ['serviceId' => $id, 'name' => $name, 'adminId' => Auth::userId()]);
 
         $stmt = $db->prepare("SELECT * FROM services WHERE id = ?");
         $stmt->execute([$id]);
@@ -65,6 +104,8 @@ class ServiceController {
         Auth::protect(); Auth::authorize('admin');
         $data = getJsonInput();
         $db = getDb();
+
+        self::validatePayload($data, true);
 
         $fields = []; $params = [];
         if (isset($data['name'])) {
@@ -79,12 +120,12 @@ class ServiceController {
         if (isset($data['isActive'])) { $fields[] = "is_active = ?"; $params[] = $data['isActive'] ? 1 : 0; }
         if (isset($data['sortOrder'])) { $fields[] = "sort_order = ?"; $params[] = $data['sortOrder']; }
         if (isset($data['pricing'])) {
-            $p = $data['pricing'];
-            if (isset($p['basePrice'])) { $fields[] = "pricing_base_price = ?"; $params[] = $p['basePrice']; }
-            if (isset($p['gstPercent'])) { $fields[] = "pricing_gst_percent = ?"; $params[] = $p['gstPercent']; }
-            if (isset($p['totalPrice'])) { $fields[] = "pricing_total_price = ?"; $params[] = $p['totalPrice']; }
-            if (isset($p['isCustom'])) { $fields[] = "pricing_is_custom = ?"; $params[] = $p['isCustom'] ? 1 : 0; }
-            if (isset($p['pricingNote'])) { $fields[] = "pricing_note = ?"; $params[] = $p['pricingNote']; }
+            $p = normalizeServicePricing($data['pricing']);
+            $fields[] = "pricing_base_price = ?"; $params[] = $p['basePrice'];
+            $fields[] = "pricing_gst_percent = ?"; $params[] = $p['gstPercent'];
+            $fields[] = "pricing_total_price = ?"; $params[] = $p['totalPrice'];
+            $fields[] = "pricing_is_custom = ?"; $params[] = $p['isCustom'] ? 1 : 0;
+            $fields[] = "pricing_note = ?"; $params[] = $p['pricingNote'];
         }
 
         if ($fields) {
@@ -92,9 +133,11 @@ class ServiceController {
             $db->prepare("UPDATE services SET " . implode(', ', $fields) . " WHERE id = ?")->execute($params);
         }
 
-        if (isset($data['requiredDocuments']) || isset($data['features']) || isset($data['process']) || isset($data['faqs'])) {
+        if (isset($data['requiredDocuments']) || isset($data['features']) || isset($data['process']) || isset($data['faqs']) || isset($data['dynamicFields'])) {
             self::saveRelated($db, $id, $data);
         }
+
+        appLog('info', 'Service updated', ['serviceId' => (int)$id, 'adminId' => Auth::userId()]);
 
         $stmt = $db->prepare("SELECT * FROM services WHERE id = ?");
         $stmt->execute([$id]);
@@ -108,6 +151,7 @@ class ServiceController {
         Auth::protect(); Auth::authorize('admin');
         $db = getDb();
         $db->prepare("UPDATE services SET is_active = 0 WHERE id = ?")->execute([$id]);
+        appLog('warning', 'Service deactivated', ['serviceId' => (int)$id, 'adminId' => Auth::userId()]);
         jsonResponse(['message' => 'Service deactivated']);
     }
 
@@ -133,6 +177,39 @@ class ServiceController {
             $db->prepare("DELETE FROM service_faqs WHERE service_id = ?")->execute([$serviceId]);
             $stmt = $db->prepare("INSERT INTO service_faqs (service_id, question, answer) VALUES (?,?,?)");
             foreach ($data['faqs'] as $f) { $stmt->execute([$serviceId, $f['question'], $f['answer']]); }
+        }
+        if (isset($data['dynamicFields'])) {
+            $db->prepare("DELETE FROM service_form_field_options WHERE field_id IN (SELECT id FROM service_form_fields WHERE service_id = ?)")->execute([$serviceId]);
+            $db->prepare("DELETE FROM service_form_fields WHERE service_id = ?")->execute([$serviceId]);
+
+            $fieldStmt = $db->prepare("INSERT INTO service_form_fields (service_id, field_key, label, field_type, placeholder, help_text, default_value, validation_rules, is_required, is_active, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+            $optionStmt = $db->prepare("INSERT INTO service_form_field_options (field_id, option_value, option_label, sort_order) VALUES (?,?,?,?)");
+
+            foreach ($data['dynamicFields'] as $index => $field) {
+                $fieldStmt->execute([
+                    $serviceId,
+                    $field['fieldKey'],
+                    $field['label'],
+                    $field['type'],
+                    $field['placeholder'] ?? null,
+                    $field['helpText'] ?? null,
+                    $field['defaultValue'] ?? null,
+                    isset($field['validation']) ? json_encode($field['validation']) : null,
+                    !empty($field['isRequired']) ? 1 : 0,
+                    array_key_exists('isActive', $field) ? (!empty($field['isActive']) ? 1 : 0) : 1,
+                    $field['sortOrder'] ?? $index,
+                ]);
+
+                $fieldId = (int)$db->lastInsertId();
+                foreach ($field['options'] ?? [] as $optionIndex => $option) {
+                    $optionStmt->execute([
+                        $fieldId,
+                        $option['value'] ?? '',
+                        $option['label'] ?? ($option['value'] ?? ''),
+                        $option['sortOrder'] ?? $optionIndex,
+                    ]);
+                }
+            }
         }
     }
 }

@@ -1,33 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'export',
+  trailingSlash: true,
   images: {
-    domains: ['localhost', 'api.helpshack.in'],
+    unoptimized: true,
+    domains: ['localhost', 'api.helpshack.in', 'taxwebsite.onrender.com'],
   },
-  async rewrites() {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL;
-    // Only set up rewrites if a real backend URL is configured
-    // This prevents 508 loops on Vercel when no backend is set
-    if (backendUrl && backendUrl !== '') {
-      return [
-        {
-          source: '/api/:path*',
-          destination: `${backendUrl}/api/:path*`,
-        },
-      ];
-    }
-    // In local development, proxy to localhost
-    if (process.env.NODE_ENV === 'development') {
-      return [
-        {
-          source: '/api/:path*',
-          destination: 'http://localhost:5000/api/:path*',
-        },
-      ];
-    }
-    // No rewrites in production without backend URL
-    return [];
-  },
+  // NOTE: No rewrites needed.
+  // api.js already calls the backend directly using NEXT_PUBLIC_API_URL.
+  // Adding rewrites here causes 508 loops and white pages on Vercel.
 };
 
 module.exports = nextConfig;

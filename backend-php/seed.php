@@ -19,7 +19,7 @@ if ($userCount > 0 && $serviceCount > 0) {
     if (!in_array('--force', $argv ?? [])) exit(0);
     echo "⚠️  Force re-seeding — clearing data...\n";
     $db->exec("SET FOREIGN_KEY_CHECKS = 0");
-    foreach (['activity_logs','notifications','task_remarks','tasks','messages','chat_room_participants','chat_rooms','invoice_items','invoices','application_timeline','application_notes','application_documents','applications','service_faqs','service_process','service_features','service_documents','services','users'] as $t) {
+    foreach (['activity_logs','email_queue','email_templates','notification_devices','notifications','task_remarks','tasks','messages','chat_room_participants','chat_rooms','invoice_items','invoices','application_timeline','application_notes','application_documents','application_form_values','applications','service_form_field_options','service_form_fields','service_faqs','service_process','service_features','service_documents','services','users'] as $t) {
         $db->exec("TRUNCATE TABLE $t");
     }
     $db->exec("SET FOREIGN_KEY_CHECKS = 1");
@@ -113,6 +113,8 @@ $docStmt = $db->prepare("INSERT INTO service_documents (service_id, name, descri
 $featStmt = $db->prepare("INSERT INTO service_features (service_id, feature) VALUES (?,?)");
 $procStmt = $db->prepare("INSERT INTO service_process (service_id, step, title, description) VALUES (?,?,?,?)");
 $faqStmt = $db->prepare("INSERT INTO service_faqs (service_id, question, answer) VALUES (?,?,?)");
+$fieldStmt = $db->prepare("INSERT INTO service_form_fields (service_id, field_key, label, field_type, placeholder, help_text, validation_rules, is_required, sort_order) VALUES (?,?,?,?,?,?,?,?,?)");
+$fieldOptionStmt = $db->prepare("INSERT INTO service_form_field_options (field_id, option_value, option_label, sort_order) VALUES (?,?,?,?)");
 
 foreach ($services as $s) {
     $svcStmt->execute([$s[0], $s[1], $s[2], $s[3], $s[4], $s[5], $s[6], $s[7], $s[8], $s[9], $s[10], $s[11], $s[12], $s[13]]);
@@ -128,6 +130,32 @@ foreach ($services as $s) {
     foreach ($s[17] as $f) { $faqStmt->execute([$sid, $f[0], $f[1]]); }
 
     echo "✅ Service: {$s[0]}\n";
+
+    if ($s[1] === 'income-tax') {
+        $fieldStmt->execute([$sid, 'assessment_year', 'Assessment Year', 'select', null, 'Select the relevant assessment year', json_encode(['required' => true]), 1, 1]);
+        $assessmentYearFieldId = (int)$db->lastInsertId();
+        foreach ([['2024-25', 'AY 2024-25'], ['2025-26', 'AY 2025-26'], ['2026-27', 'AY 2026-27']] as $index => $option) {
+            $fieldOptionStmt->execute([$assessmentYearFieldId, $option[0], $option[1], $index + 1]);
+        }
+
+        $fieldStmt->execute([$sid, 'taxpayer_type', 'Taxpayer Type', 'radio', null, 'Choose your filing category', json_encode(['required' => true]), 1, 2]);
+        $taxpayerTypeFieldId = (int)$db->lastInsertId();
+        foreach ([['salaried', 'Salaried'], ['business', 'Business'], ['freelancer', 'Freelancer']] as $index => $option) {
+            $fieldOptionStmt->execute([$taxpayerTypeFieldId, $option[0], $option[1], $index + 1]);
+        }
+
+        $fieldStmt->execute([$sid, 'annual_income', 'Annual Income', 'number', 'Enter annual income', 'Used to validate the applicable filing flow', json_encode(['min' => 0]), 1, 3]);
+        $fieldStmt->execute([$sid, 'bank_statement', 'Latest Bank Statement', 'file', null, 'Upload PDF or image copy', json_encode(['extensions' => ['pdf', 'jpg', 'jpeg', 'png']]), 0, 4]);
+    }
+}
+
+$templateStmt = $db->prepare("INSERT INTO email_templates (slug, name, subject_template, body_html, body_text, is_active) VALUES (?,?,?,?,?,1)");
+foreach ([
+    ['user-registration', 'User Registration', 'Welcome to Helpshack, {{user.name}}', '<p>Hello {{user.name}},</p><p>Your Helpshack account has been created successfully.</p>', 'Hello {{user.name}}, your Helpshack account has been created successfully.'],
+    ['registration-service-request', 'Service Request Submission', 'Application {{applicationId}} received for {{serviceName}}', '<p>Hello {{user.name}},</p><p>We received your application <strong>{{applicationId}}</strong> for <strong>{{serviceName}}</strong>.</p><p>Status: {{status}}</p>', 'We received your application {{applicationId}} for {{serviceName}}. Status: {{status}}'],
+    ['application-status-update', 'Application Status Update', 'Application {{applicationId}} is now {{status}}', '<p>Your application <strong>{{applicationId}}</strong> is now <strong>{{status}}</strong>.</p><p>{{message}}</p>', 'Your application {{applicationId}} is now {{status}}. {{message}}'],
+] as $template) {
+    $templateStmt->execute($template);
 }
 
 echo "\n🎉 Database seeded successfully!\n";

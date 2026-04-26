@@ -1,0 +1,17 @@
+RewriteEngine On
+
+# Let PHP backend handle all /api requests
+RewriteRule ^api(/.*)?$ - [L]
+
+# If the request is for an existing file or directory, serve it
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Dynamic exported routes
+RewriteRule ^services/[^/]+/?$ /services/[slug]/index.html [L]
+RewriteRule ^admin/applications/[^/]+/?$ /admin/applications/[id]/index.html [L]
+RewriteRule ^dashboard/applications/[^/]+/?$ /dashboard/applications/[id]/index.html [L]
+
+# Fallback for static frontend routes
+RewriteRule ^ /index.html [L]

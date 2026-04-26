@@ -94,6 +94,35 @@ CREATE TABLE IF NOT EXISTS service_faqs (
   FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- Dynamic service form fields
+CREATE TABLE IF NOT EXISTS service_form_fields (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  service_id INT NOT NULL,
+  field_key VARCHAR(100) NOT NULL,
+  label VARCHAR(255) NOT NULL,
+  field_type ENUM('text','textarea','number','email','phone','select','radio','checkbox','date','file') NOT NULL,
+  placeholder VARCHAR(255) DEFAULT NULL,
+  help_text VARCHAR(500) DEFAULT NULL,
+  default_value TEXT DEFAULT NULL,
+  validation_rules JSON DEFAULT NULL,
+  is_required TINYINT(1) DEFAULT 0,
+  is_active TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_service_field_key (service_id, field_key),
+  FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS service_form_field_options (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  field_id INT NOT NULL,
+  option_value VARCHAR(255) NOT NULL,
+  option_label VARCHAR(255) NOT NULL,
+  sort_order INT DEFAULT 0,
+  FOREIGN KEY (field_id) REFERENCES service_form_fields(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 -- Applications table
 CREATE TABLE IF NOT EXISTS applications (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -121,6 +150,20 @@ CREATE TABLE IF NOT EXISTS applications (
   INDEX idx_app_client (client_id, status),
   INDEX idx_app_employee (assigned_employee_id, status),
   INDEX idx_app_created (created_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS application_form_values (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  application_id INT NOT NULL,
+  field_id INT DEFAULT NULL,
+  field_key VARCHAR(100) NOT NULL,
+  field_label VARCHAR(255) NOT NULL,
+  value_text TEXT DEFAULT NULL,
+  value_json JSON DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE,
+  FOREIGN KEY (field_id) REFERENCES service_form_fields(id) ON DELETE SET NULL,
+  INDEX idx_application_field_key (application_id, field_key)
 ) ENGINE=InnoDB;
 
 -- Application documents
@@ -215,6 +258,7 @@ CREATE TABLE IF NOT EXISTS chat_room_participants (
   id INT AUTO_INCREMENT PRIMARY KEY,
   room_id INT NOT NULL,
   user_id INT NOT NULL,
+  last_seen_at DATETIME DEFAULT NULL,
   FOREIGN KEY (room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id),
   UNIQUE KEY uniq_room_user (room_id, user_id)
@@ -229,6 +273,8 @@ CREATE TABLE IF NOT EXISTS messages (
   type ENUM('text','file','image','system') DEFAULT 'text',
   file_url VARCHAR(500) DEFAULT NULL,
   file_name VARCHAR(255) DEFAULT NULL,
+  delivered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  seen_at DATETIME DEFAULT NULL,
   is_read TINYINT(1) DEFAULT 0,
   read_at DATETIME DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -277,7 +323,9 @@ CREATE TABLE IF NOT EXISTS notifications (
   title VARCHAR(255) NOT NULL,
   message TEXT NOT NULL,
   type ENUM('info','success','warning','error','task','payment','application','chat') DEFAULT 'info',
+  channel ENUM('in_app','push','email') DEFAULT 'in_app',
   link VARCHAR(500) DEFAULT NULL,
+  payload JSON DEFAULT NULL,
   is_read TINYINT(1) DEFAULT 0,
   read_at DATETIME DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -285,12 +333,57 @@ CREATE TABLE IF NOT EXISTS notifications (
   INDEX idx_notif_user (user_id, is_read, created_at)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS notification_devices (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  platform ENUM('web','android','ios') NOT NULL,
+  device_token VARCHAR(500) NOT NULL,
+  endpoint VARCHAR(500) DEFAULT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_user_device (user_id, device_token),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS email_templates (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  slug VARCHAR(100) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL,
+  subject_template VARCHAR(255) NOT NULL,
+  body_html MEDIUMTEXT NOT NULL,
+  body_text MEDIUMTEXT DEFAULT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS email_queue (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  to_email VARCHAR(255) NOT NULL,
+  to_name VARCHAR(255) DEFAULT NULL,
+  template_slug VARCHAR(100) DEFAULT NULL,
+  subject VARCHAR(255) NOT NULL,
+  body_html MEDIUMTEXT NOT NULL,
+  body_text MEDIUMTEXT DEFAULT NULL,
+  payload JSON DEFAULT NULL,
+  status ENUM('queued','processing','sent','failed') DEFAULT 'queued',
+  attempts INT DEFAULT 0,
+  available_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  sent_at DATETIME DEFAULT NULL,
+  last_error TEXT DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_email_queue_status (status, available_at)
+) ENGINE=InnoDB;
+
 -- Activity logs
 CREATE TABLE IF NOT EXISTS activity_logs (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   action VARCHAR(255) NOT NULL,
-  entity ENUM('user','application','task','service','invoice','payment','document') NOT NULL,
+  entity ENUM('user','application','task','service','invoice','payment','document','notification','email','chat') NOT NULL,
   entity_id INT DEFAULT NULL,
   details JSON DEFAULT NULL,
   ip_address VARCHAR(45) DEFAULT NULL,

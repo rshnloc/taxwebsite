@@ -1,6 +1,16 @@
 <?php
 class ChatController {
 
+    private static function ensureParticipant($db, $roomId) {
+        $stmt = $db->prepare("SELECT id, last_seen_at FROM chat_room_participants WHERE room_id = ? AND user_id = ? LIMIT 1");
+        $stmt->execute([$roomId, Auth::userId()]);
+        $participant = $stmt->fetch();
+        if (!$participant) {
+            jsonResponse(['error' => 'Not authorized for this chat room'], 403);
+        }
+        return $participant;
+    }
+
     private static function formatRoom($r, $db) {
         if (!$r) return null;
         $id = (int)$r['id'];
@@ -28,10 +38,18 @@ class ChatController {
             ];
         }
 
+        $unreadCount = 0;
+        if (Auth::userId()) {
+            $stmt = $db->prepare("SELECT COUNT(*) FROM messages WHERE room_id = ? AND sender_id != ? AND seen_at IS NULL");
+            $stmt->execute([$id, Auth::userId()]);
+            $unreadCount = (int)$stmt->fetchColumn();
+        }
+
         return [
             'id' => $id, '_id' => (string)$id,
             'application' => $app, 'participants' => $participants,
             'lastMessage' => $lastMsg, 'isActive' => (bool)$r['is_active'],
+            'unreadCount' => $unreadCount,
             'createdAt' => $r['created_at'], 'updatedAt' => $r['updated_at'],
         ];
     }
@@ -61,6 +79,7 @@ class ChatController {
     public static function getMessages($roomId) {
         Auth::protect();
         $db = getDb();
+        self::ensureParticipant($db, $roomId);
         $page = max(1, (int)($_GET['page'] ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 50));
         $offset = ($page - 1) * $limit;
@@ -74,11 +93,15 @@ class ChatController {
             'content' => $m['content'], 'type' => $m['type'],
             'fileUrl' => $m['file_url'], 'fileName' => $m['file_name'],
             'isRead' => (bool)$m['is_read'], 'readAt' => $m['read_at'],
+            'deliveredAt' => $m['delivered_at'], 'seenAt' => $m['seen_at'],
+            'status' => $m['seen_at'] ? 'seen' : ($m['delivered_at'] ? 'delivered' : 'sent'),
             'createdAt' => $m['created_at'],
         ], $stmt->fetchAll()));
 
         // Mark as read
-        $db->prepare("UPDATE messages SET is_read = 1, read_at = NOW() WHERE room_id = ? AND sender_id != ? AND is_read = 0")
+        $db->prepare("UPDATE messages SET is_read = 1, read_at = NOW(), seen_at = NOW() WHERE room_id = ? AND sender_id != ? AND is_read = 0")
+           ->execute([$roomId, Auth::userId()]);
+        $db->prepare("UPDATE chat_room_participants SET last_seen_at = NOW() WHERE room_id = ? AND user_id = ?")
            ->execute([$roomId, Auth::userId()]);
 
         jsonResponse(['messages' => $messages]);
@@ -121,6 +144,7 @@ class ChatController {
         Auth::protect();
         $data = getJsonInput();
         $db = getDb();
+        self::ensureParticipant($db, $roomId);
         $content = $data['content'] ?? '';
         $type = $data['type'] ?? 'text';
         $fileUrl = null; $fileName = null;
@@ -139,7 +163,11 @@ class ChatController {
             if (!$content) $content = $file['name'];
         }
 
-        $stmt = $db->prepare("INSERT INTO messages (room_id, sender_id, content, type, file_url, file_name) VALUES (?,?,?,?,?,?)");
+        if (!$content && !$fileUrl) {
+            jsonResponse(['error' => 'Message content or file is required'], 400);
+        }
+
+        $stmt = $db->prepare("INSERT INTO messages (room_id, sender_id, content, type, file_url, file_name, delivered_at) VALUES (?,?,?,?,?,?,NOW())");
         $stmt->execute([$roomId, Auth::userId(), $content, $type, $fileUrl, $fileName]);
         $msgId = (int)$db->lastInsertId();
 
@@ -150,13 +178,33 @@ class ChatController {
         $stmt = $db->prepare("SELECT m.*, u.name as sender_name, u.role as sender_role, u.avatar as sender_avatar FROM messages m LEFT JOIN users u ON m.sender_id = u.id WHERE m.id = ?");
         $stmt->execute([$msgId]);
         $m = $stmt->fetch();
+
+        $participantStmt = $db->prepare("SELECT user_id FROM chat_room_participants WHERE room_id = ? AND user_id != ?");
+        $participantStmt->execute([$roomId, Auth::userId()]);
+        foreach ($participantStmt->fetchAll() as $participant) {
+            createNotification($db, $participant['user_id'], 'New Message', 'You have a new message', 'chat', "/dashboard/chat?room=$roomId", 'in_app', ['roomId' => (int)$roomId, 'messageId' => $msgId]);
+        }
+
         jsonResponse(['message' => [
             'id' => (int)$m['id'], '_id' => (string)$m['id'],
             'room' => (string)$roomId,
             'sender' => ['_id' => (string)$m['sender_id'], 'name' => $m['sender_name'], 'role' => $m['sender_role'], 'avatar' => $m['sender_avatar']],
             'content' => $m['content'], 'type' => $m['type'],
             'fileUrl' => $m['file_url'], 'fileName' => $m['file_name'],
-            'isRead' => false, 'createdAt' => $m['created_at'],
+            'isRead' => false, 'deliveredAt' => $m['delivered_at'], 'seenAt' => $m['seen_at'], 'status' => 'delivered', 'createdAt' => $m['created_at'],
         ]], 201);
+    }
+
+    public static function markRoomSeen($roomId) {
+        Auth::protect();
+        $db = getDb();
+        self::ensureParticipant($db, $roomId);
+
+        $db->prepare("UPDATE messages SET is_read = 1, read_at = NOW(), seen_at = NOW() WHERE room_id = ? AND sender_id != ? AND seen_at IS NULL")
+           ->execute([$roomId, Auth::userId()]);
+        $db->prepare("UPDATE chat_room_participants SET last_seen_at = NOW() WHERE room_id = ? AND user_id = ?")
+           ->execute([$roomId, Auth::userId()]);
+
+        jsonResponse(['message' => 'Room marked as seen']);
     }
 }
