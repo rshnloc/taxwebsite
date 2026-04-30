@@ -23,7 +23,15 @@ export default function AdminReports() {
 
   if (loading) return <DashboardLayout><PageLoading /></DashboardLayout>;
 
-  const { totalClients = 0, totalEmployees = 0, totalApplications = 0, completedApplications = 0, totalRevenue = 0, monthlyStats = [], statusDistribution = [], servicePopularity = [] } = stats || {};
+  const rawStats = stats?.stats || {};
+  const { totalClients = 0, totalEmployees = 0, totalApplications = 0, completedApplications = 0, totalRevenue = 0 } = rawStats;
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthlyStats = (stats?.monthlyStats || []).map(m => ({
+    ...m,
+    _id: typeof m._id === 'object' ? `${MONTH_NAMES[(m._id.month||1)-1]} ${m._id.year}` : (m._id || ''),
+  }));
+  const statusDistribution = stats?.statusDistribution || [];
+  const servicePopularity = stats?.serviceStats || [];
   const avgRevenue = monthlyStats.length ? Math.round(totalRevenue / monthlyStats.length) : 0;
   const completionRate = totalApplications ? ((completedApplications / totalApplications) * 100).toFixed(1) : 0;
 

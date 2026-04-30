@@ -42,7 +42,7 @@ export default function AdminClientTypes() {
 
   const openEdit = (t) => {
     setEditingType(t);
-    setForm({ name: t.name, description: t.description || '', required_fields: t.required_fields || [] });
+    setForm({ name: t.name, description: t.description || '', required_fields: t.requiredFields || t.required_fields || [] });
     setShowModal(true);
   };
 
@@ -58,8 +58,9 @@ export default function AdminClientTypes() {
   const handleSubmit = async (e) => {
     e.preventDefault(); setSaving(true);
     try {
-      if (editingType) { await api.updateClientType(editingType.id, form); toast.success('Updated'); }
-      else             { await api.createClientType(form); toast.success('Created'); }
+      const payload = { name: form.name, description: form.description, requiredFields: form.required_fields };
+      if (editingType) { await api.updateClientType(editingType.id, payload); toast.success('Updated'); }
+      else             { await api.createClientType(payload); toast.success('Created'); }
       setShowModal(false); fetchTypes();
     } catch (err) { toast.error(err.message); }
     finally { setSaving(false); }
@@ -94,7 +95,7 @@ export default function AdminClientTypes() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-slate-900 dark:text-white">{t.name}</h3>
-                    <p className="text-xs text-slate-400">{(t.required_fields || []).length} required field(s)</p>
+                    <p className="text-xs text-slate-400">{(t.requiredFields || t.required_fields || []).length} required field(s)</p>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -104,12 +105,12 @@ export default function AdminClientTypes() {
               </div>
               {t.description && <p className="text-sm text-slate-500">{t.description}</p>}
               <div className="flex flex-wrap gap-1.5">
-                {(t.required_fields || []).map(f => (
+                {(t.requiredFields || t.required_fields || []).map(f => (
                   <span key={f} className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 px-2 py-0.5 rounded-full">
                     {AVAILABLE_FIELDS.find(af => af.value === f)?.label || f}
                   </span>
                 ))}
-                {(!t.required_fields || t.required_fields.length === 0) && (
+                {(!(t.requiredFields || t.required_fields) || (t.requiredFields || t.required_fields).length === 0) && (
                   <span className="text-xs text-slate-400 italic">No required fields defined</span>
                 )}
               </div>

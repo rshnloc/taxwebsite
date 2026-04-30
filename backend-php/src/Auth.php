@@ -20,6 +20,11 @@ class Auth {
         $headers = getallheaders();
         $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
 
+        // Allow token via query param for browser-native requests (e.g. PDF download in new tab)
+        if (empty($authHeader) && !empty($_GET['token'])) {
+            $authHeader = 'Bearer ' . $_GET['token'];
+        }
+
         if (!preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
             http_response_code(401);
             echo json_encode(['error' => 'Not authorized, no token provided']);

@@ -3,6 +3,7 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
 import toast from 'react-hot-toast';
+import { Eye, EyeOff, Lock } from 'lucide-react';
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
@@ -13,6 +14,10 @@ export default function ProfilePage() {
       state: user?.address?.state || '', pincode: user?.address?.pincode || '' }
   });
   const [saving, setSaving] = useState(false);
+
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [showPw, setShowPw] = useState({ current: false, new: false, confirm: false });
+  const [savingPw, setSavingPw] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -35,6 +40,22 @@ export default function ProfilePage() {
       toast.error(error.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (pwForm.newPassword !== pwForm.confirmPassword) return toast.error('New passwords do not match');
+    if (pwForm.newPassword.length < 8) return toast.error('Password must be at least 8 characters');
+    setSavingPw(true);
+    try {
+      await api.changePassword({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });
+      toast.success('Password changed successfully!');
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingPw(false);
     }
   };
 
@@ -98,6 +119,41 @@ export default function ProfilePage() {
 
           <button type="submit" disabled={saving} className="btn-primary">
             {saving ? <span className="spinner w-5 h-5" /> : 'Save Changes'}
+          </button>
+        </form>
+
+        {/* Change Password */}
+        <form onSubmit={handleChangePassword} className="space-y-4 card">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            <Lock size={18} /> Change Password
+          </h2>
+          {[
+            { key: 'currentPassword', label: 'Current Password', placeholder: 'Enter current password' },
+            { key: 'newPassword', label: 'New Password', placeholder: 'Min 8 characters' },
+            { key: 'confirmPassword', label: 'Confirm New Password', placeholder: 'Repeat new password' },
+          ].map(({ key, label, placeholder }) => (
+            <div key={key}>
+              <label className="label">{label}</label>
+              <div className="relative">
+                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type={showPw[key === 'currentPassword' ? 'current' : key === 'newPassword' ? 'new' : 'confirm'] ? 'text' : 'password'}
+                  value={pwForm[key]}
+                  onChange={e => setPwForm(p => ({ ...p, [key]: e.target.value }))}
+                  className="input pl-10 pr-10"
+                  placeholder={placeholder}
+                  required
+                />
+                <button type="button"
+                  onClick={() => setShowPw(p => ({ ...p, [key === 'currentPassword' ? 'current' : key === 'newPassword' ? 'new' : 'confirm']: !p[key === 'currentPassword' ? 'current' : key === 'newPassword' ? 'new' : 'confirm'] }))}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showPw[key === 'currentPassword' ? 'current' : key === 'newPassword' ? 'new' : 'confirm'] ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+          ))}
+          <button type="submit" disabled={savingPw} className="btn-primary">
+            {savingPw ? <span className="spinner w-5 h-5" /> : 'Change Password'}
           </button>
         </form>
       </div>

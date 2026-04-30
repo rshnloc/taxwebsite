@@ -3,6 +3,7 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import { PageLoading, Modal } from '../../components/ui';
 import api from '../../lib/api';
 import { UserCheck, Plus, Pencil, Trash2, Search, RefreshCw, ChevronDown } from 'lucide-react';
+import SearchableSelect from '../../components/SearchableSelect';
 import toast from 'react-hot-toast';
 
 const STATUS_BADGE = {
@@ -14,6 +15,8 @@ const STATUS_BADGE = {
 export default function AdminRMAssignments() {
   const [assignments, setAssignments] = useState([]);
   const [rmList, setRMList] = useState([]);
+  const [clientList, setClientList] = useState([]);
+  const [clientSearch, setClientSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
@@ -27,21 +30,26 @@ export default function AdminRMAssignments() {
 
   const fetchAll = async () => {
     try {
-      const [aRes, rRes] = await Promise.all([api.getRMAssignments(), api.getRMList()]);
+      const [aRes, rRes, cRes] = await Promise.all([
+        api.getRMAssignments(),
+        api.getRMList(),
+        api.getUsers({ role: 'client', limit: 200 }),
+      ]);
       setAssignments(aRes.assignments || []);
       setRMList(rRes.rms || []);
+      setClientList(cRes.users || []);
     } catch { toast.error('Failed to load'); }
     finally { setLoading(false); }
   };
 
-  const openAdd = () => { setEditingAssignment(null); setForm({ rm_id: '', client_id: '', notes: '' }); setShowModal(true); };
-  const openEdit = (a) => { setEditingAssignment(a); setForm({ rm_id: a.rm_id, client_id: a.client_id, notes: a.notes || '' }); setShowModal(true); };
+  const openAdd = () => { setEditingAssignment(null); setForm({ rm_id: '', client_id: '', notes: '' }); setClientSearch(''); setShowModal(true); };
+  const openEdit = (a) => { setEditingAssignment(a); setForm({ rm_id: a.rm?.id || a.rm_id || '', client_id: a.client?.id || a.client_id || '', notes: a.notes || '' }); setClientSearch(''); setShowModal(true); };
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setSaving(true);
     try {
-      if (editingAssignment) { await api.updateRMAssignment(editingAssignment.id, form); toast.success('Assignment updated'); }
-      else                   { await api.assignRM(form); toast.success('RM assigned'); }
+      if (editingAssignment) { await api.updateRMAssignment(editingAssignment.id, { notes: form.notes }); toast.success('Assignment updated'); }
+      else                   { await api.assignRM({ rmUserId: form.rm_id, clientUserId: form.client_id, notes: form.notes }); toast.success('RM assigned'); }
       setShowModal(false); fetchAll();
     } catch (err) { toast.error(err.message); }
     finally { setSaving(false); }
@@ -55,9 +63,12 @@ export default function AdminRMAssignments() {
 
   const filtered = assignments.filter(a => {
     const q = search.toLowerCase();
-    if (q && !a.client_name?.toLowerCase().includes(q) && !a.rm_name?.toLowerCase().includes(q) && !a.client_email?.toLowerCase().includes(q)) return false;
-    if (filterRM && a.rm_id != filterRM) return false;
-    if (filterStatus && a.status !== filterStatus) return false;
+    const clientName = a.client?.name || a.client_name || '';
+    const rmName = a.rm?.name || a.rm_name || '';
+    const clientEmail = a.client?.email || a.client_email || '';
+    if (q && !clientName.toLowerCase().includes(q) && !rmName.toLowerCase().includes(q) && !clientEmail.toLowerCase().includes(q)) return false;
+    if (filterRM && String(a.rm?.id || a.rm_id) !== String(filterRM)) return false;
+    if (filterStatus && a.isActive !== undefined ? (filterStatus === 'active' ? !a.isActive : a.isActive) : a.status !== filterStatus) return false;
     return true;
   });
 
@@ -83,8 +94,8 @@ export default function AdminRMAssignments() {
           {[
             { label: 'Total Assignments', val: assignments.length, color: 'bg-blue-50 text-blue-600' },
             { label: 'Active', val: assignments.filter(a => a.status === 'active').length, color: 'bg-green-50 text-green-600' },
-            { label: 'Unique RMs', val: new Set(assignments.map(a => a.rm_id)).size, color: 'bg-indigo-50 text-indigo-600' },
-            { label: 'Unique Clients', val: new Set(assignments.map(a => a.client_id)).size, color: 'bg-orange-50 text-orange-600' },
+            { label: 'Unique RMs', val: new Set(assignments.map(a => a.rm?.id || a.rm_id)).size, color: 'bg-indigo-50 text-indigo-600' },
+            { label: 'Unique Clients', val: new Set(assignments.map(a => a.client?.id || a.client_id)).size, color: 'bg-orange-50 text-orange-600' },
           ].map(s => (
             <div key={s.label} className={`rounded-xl p-4 ${s.color}`}>
               <div className="text-2xl font-bold">{s.val}</div>
@@ -137,26 +148,26 @@ export default function AdminRMAssignments() {
                 ) : filtered.map(a => (
                   <tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900 dark:text-white">{a.client_name}</div>
-                      <div className="text-xs text-slate-400">{a.client_email}</div>
+                      <div className="font-medium text-slate-900 dark:text-white">{a.client?.name || a.companyName || '—'}</div>
+                      <div className="text-xs text-slate-400">{a.client?.email || '—'}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900 dark:text-white">{a.rm_name}</div>
-                      <div className="text-xs text-slate-400">{a.rm_email}</div>
+                      <div className="font-medium text-slate-900 dark:text-white">{a.rm?.name || '—'}</div>
+                      <div className="text-xs text-slate-400">{a.rm?.email || '—'}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[a.status] || 'bg-slate-100 text-slate-500'}`}>
-                        {a.status}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {a.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                      {a.assigned_at ? new Date(a.assigned_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
+                      {a.assignedAt ? new Date(a.assignedAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-400 max-w-[160px] truncate" title={a.notes}>{a.notes || '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1 justify-end">
                         <button onClick={() => openEdit(a)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"><Pencil size={14}/></button>
-                        {a.status === 'active' && (
+                        {a.isActive && (
                           <button onClick={() => handleUnassign(a)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500"><Trash2 size={14}/></button>
                         )}
                       </div>
@@ -174,21 +185,24 @@ export default function AdminRMAssignments() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label">Relationship Manager *</label>
-            <div className="relative">
-              <select required value={form.rm_id} onChange={e => setForm({...form, rm_id: e.target.value})} className="input appearance-none pr-8">
-                <option value="">Select RM...</option>
-                {rmList.map(r => (
-                  <option key={r.id} value={r.id}>{r.name} — {r.email}</option>
-                ))}
-              </select>
-              <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
-            </div>
+            <SearchableSelect
+              required
+              value={String(form.rm_id || '')}
+              onChange={v => setForm({...form, rm_id: v})}
+              options={rmList.map(r => ({ value: String(r.id), label: r.name + ' — ' + r.email }))}
+              placeholder="Select RM…"
+            />
           </div>
           {!editingAssignment && (
             <div>
-              <label className="label">Client User ID *</label>
-              <input required type="number" value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} className="input" placeholder="Enter client user ID"/>
-              <p className="text-xs text-slate-400 mt-1">You can find the User ID from the Users management page</p>
+              <label className="label">Client *</label>
+              <SearchableSelect
+                required
+                value={String(form.client_id || '')}
+                onChange={v => setForm({...form, client_id: v})}
+                options={clientList.map(c => ({ value: String(c._id), label: c.name + ' — ' + c.email + (c.phone ? ' — ' + c.phone : '') }))}
+                placeholder="Search and select client…"
+              />
             </div>
           )}
           <div>

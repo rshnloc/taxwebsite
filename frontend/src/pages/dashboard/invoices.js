@@ -23,7 +23,8 @@ export default function InvoicesPage() {
   };
 
   const downloadPDF = (id) => {
-    window.open(`${process.env.NEXT_PUBLIC_API_URL}/api/invoices/${id}/pdf`, '_blank');
+    const token = localStorage.getItem('token');
+    window.open(`${process.env.NEXT_PUBLIC_API_URL}/api/invoices/${id}/pdf?token=${token}`, '_blank');
   };
 
   if (loading) return <DashboardLayout><PageLoading /></DashboardLayout>;

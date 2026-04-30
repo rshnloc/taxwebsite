@@ -77,18 +77,33 @@ class ServiceController {
         $slug = preg_replace('/[^a-z0-9]+/', '-', strtolower($name));
         $slug = trim($slug, '-');
 
+        // ensure slug is unique
+        $baseSlug = $slug;
+        $counter = 2;
+        while ($db->query("SELECT id FROM services WHERE slug = '" . addslashes($slug) . "'")->fetch()) {
+            $slug = $baseSlug . '-' . $counter++;
+        }
+
         $pricing = normalizeServicePricing($data['pricing'] ?? []);
 
-        $stmt = $db->prepare("INSERT INTO services (name, slug, short_description, description, icon, category, pricing_base_price, pricing_gst_percent, pricing_total_price, pricing_is_custom, pricing_note, timeline, is_popular, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-        $stmt->execute([
-            $name, $slug,
-            $data['shortDescription'] ?? '', $data['description'] ?? '',
-            $data['icon'] ?? 'FileText', $data['category'] ?? 'other',
-            $pricing['basePrice'], $pricing['gstPercent'], $pricing['totalPrice'],
-            $pricing['isCustom'] ? 1 : 0, $pricing['pricingNote'] ?: null,
-            $data['timeline'] ?? '7-10 working days',
-            ($data['isPopular'] ?? false) ? 1 : 0, $data['sortOrder'] ?? 0,
-        ]);
+        try {
+            $stmt = $db->prepare("INSERT INTO services (name, slug, short_description, description, icon, icon_url, category, pricing_base_price, pricing_gst_percent, pricing_total_price, pricing_is_custom, pricing_note, timeline, is_popular, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            $stmt->execute([
+                $name, $slug,
+                $data['shortDescription'] ?? '', $data['description'] ?? '',
+                $data['icon'] ?? '📄', $data['iconUrl'] ?? null,
+                $data['category'] ?? 'other',
+                $pricing['basePrice'], $pricing['gstPercent'], $pricing['totalPrice'],
+                $pricing['isCustom'] ? 1 : 0, $pricing['pricingNote'] ?: null,
+                $data['timeline'] ?? '7-10 working days',
+                ($data['isPopular'] ?? false) ? 1 : 0, $data['sortOrder'] ?? 0,
+            ]);
+        } catch (\PDOException $e) {
+            if (str_contains($e->getMessage(), '1062') || str_contains($e->getMessage(), 'Duplicate entry')) {
+                jsonResponse(['error' => "A service named \"$name\" already exists. Please use a different name."], 422);
+            }
+            throw $e;
+        }
         $id = (int)$db->lastInsertId();
 
         self::saveRelated($db, $id, $data);
@@ -113,7 +128,7 @@ class ServiceController {
             $fields[] = "name = ?"; $params[] = $data['name'];
             $fields[] = "slug = ?"; $params[] = trim($slug, '-');
         }
-        foreach (['shortDescription' => 'short_description', 'description' => 'description', 'icon' => 'icon', 'category' => 'category', 'timeline' => 'timeline'] as $key => $col) {
+        foreach (['shortDescription' => 'short_description', 'description' => 'description', 'icon' => 'icon', 'iconUrl' => 'icon_url', 'category' => 'category', 'timeline' => 'timeline'] as $key => $col) {
             if (isset($data[$key])) { $fields[] = "$col = ?"; $params[] = $data[$key]; }
         }
         if (isset($data['isPopular'])) { $fields[] = "is_popular = ?"; $params[] = $data['isPopular'] ? 1 : 0; }
@@ -146,6 +161,35 @@ class ServiceController {
         jsonResponse(['service' => formatService($s, $db)]);
     }
 
+    // POST /api/services/:id/icon
+    public static function uploadIcon($id) {
+        Auth::protect(); Auth::authorize('admin');
+        $db = getDb();
+        $stmt = $db->prepare("SELECT id FROM services WHERE id = ?");
+        $stmt->execute([(int)$id]);
+        if (!$stmt->fetch()) jsonResponse(['error' => 'Service not found'], 404);
+
+        if (empty($_FILES['icon'])) jsonResponse(['error' => 'No file uploaded'], 422);
+        $file = $_FILES['icon'];
+        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+        if (!in_array($file['type'], $allowed)) jsonResponse(['error' => 'Only image files allowed'], 422);
+        if ($file['size'] > 2 * 1024 * 1024) jsonResponse(['error' => 'File too large (max 2MB)'], 422);
+
+        $ext = pathinfo($file['name'], PATHINFO_EXTENSION) ?: 'png';
+        $uploadDir = __DIR__ . '/../../uploads/service-icons/';
+        if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+
+        $filename = 'svc-' . $id . '-' . time() . '.' . $ext;
+        $dest = $uploadDir . $filename;
+        if (!move_uploaded_file($file['tmp_name'], $dest)) jsonResponse(['error' => 'Upload failed'], 500);
+
+        // Store relative URL
+        $iconUrl = '/api/uploads/service-icons/' . $filename;
+        $db->prepare("UPDATE services SET icon_url = ?, icon = NULL, updated_at = NOW() WHERE id = ?")->execute([$iconUrl, (int)$id]);
+
+        jsonResponse(['iconUrl' => $iconUrl]);
+    }
+
     // DELETE /api/services/:id (soft)
     public static function deleteService($id) {
         Auth::protect(); Auth::authorize('admin');
@@ -158,9 +202,9 @@ class ServiceController {
     private static function saveRelated($db, $serviceId, $data) {
         if (isset($data['requiredDocuments'])) {
             $db->prepare("DELETE FROM service_documents WHERE service_id = ?")->execute([$serviceId]);
-            $stmt = $db->prepare("INSERT INTO service_documents (service_id, name, description, is_mandatory) VALUES (?,?,?,?)");
-            foreach ($data['requiredDocuments'] as $d) {
-                $stmt->execute([$serviceId, $d['name'], $d['description'] ?? null, ($d['isMandatory'] ?? true) ? 1 : 0]);
+            $stmt = $db->prepare("INSERT INTO service_documents (service_id, name, description, is_mandatory, password_enabled, sort_order) VALUES (?,?,?,?,?,?)");
+            foreach ($data['requiredDocuments'] as $i => $d) {
+                $stmt->execute([$serviceId, $d['name'], $d['description'] ?? null, ($d['isMandatory'] ?? true) ? 1 : 0, ($d['passwordEnabled'] ?? false) ? 1 : 0, $d['sortOrder'] ?? $i]);
             }
         }
         if (isset($data['features'])) {

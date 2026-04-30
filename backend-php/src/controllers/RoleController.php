@@ -13,9 +13,16 @@ class RoleController {
         $permissions = $stmt->fetchAll();
 
         // Count users with this role
-        $c = $db->prepare("SELECT COUNT(*) FROM user_roles WHERE role_id = ?");
+        // Custom roles: count users.dynamic_role_id (set by both createUser/updateUser and assignUserRole)
+        // System roles: also count users.role column (built-in string column)
+        $c = $db->prepare("SELECT COUNT(*) FROM users WHERE dynamic_role_id = ? AND is_active = 1");
         $c->execute([$r['id']]);
         $userCount = (int)$c->fetchColumn();
+        if ($r['is_system']) {
+            $c2 = $db->prepare("SELECT COUNT(*) FROM users WHERE role = ? AND is_active = 1");
+            $c2->execute([$r['slug']]);
+            $userCount = max($userCount, (int)$c2->fetchColumn());
+        }
 
         return [
             'id'          => (int)$r['id'],

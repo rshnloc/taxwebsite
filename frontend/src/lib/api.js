@@ -57,9 +57,12 @@ class ApiClient {
   // Auth
   async login(email, password) { return this.request('/auth/login', { method: 'POST', body: { email, password } }); }
   async register(data) { return this.request('/auth/register', { method: 'POST', body: data }); }
+  async verifyOTP(email, otp) { return this.request('/auth/verify-otp', { method: 'POST', body: { email, otp } }); }
+  async resendOTP(email) { return this.request('/auth/resend-otp', { method: 'POST', body: { email } }); }
   async getMe() { return this.request('/auth/me'); }
   async updateProfile(data) { return this.request('/auth/profile', { method: 'PUT', body: data }); }
   async changePassword(data) { return this.request('/auth/change-password', { method: 'PUT', body: data }); }
+  async uploadAvatar(fd) { return this.request('/auth/avatar', { method: 'POST', body: fd }); }
 
   // Users
   async getUsers(params = {}) {
@@ -78,6 +81,7 @@ class ApiClient {
   async createService(data) { return this.request('/services', { method: 'POST', body: data }); }
   async updateService(id, data) { return this.request(`/services/${id}`, { method: 'PUT', body: data }); }
   async deleteService(id) { return this.request(`/services/${id}`, { method: 'DELETE' }); }
+  async uploadServiceIcon(id, formData) { return this.request(`/services/${id}/icon`, { method: 'POST', body: formData, headers: {} }); }
 
   // Applications
   async getApplications(params = {}) {
@@ -92,10 +96,8 @@ class ApiClient {
   }
   async updateApplication(id, data) { return this.request(`/applications/${id}`, { method: 'PUT', body: data }); }
   async updateApplicationStatus(id, data) { return this.request(`/applications/${id}/status`, { method: 'PUT', body: data }); }
+  async addApplicationRemark(id, data) { return this.request(`/applications/${id}/remarks`, { method: 'POST', body: data }); }
   async assignEmployee(id, employeeId) { return this.request(`/applications/${id}/assign`, { method: 'PUT', body: { employeeId } }); }
-  async uploadDocuments(id, formData) {
-    return this.request(`/applications/${id}/documents`, { method: 'POST', body: formData, headers: {} });
-  }
 
   // Tasks
   async getTasks(params = '') { return this.request(`/tasks?${params}`); }
@@ -121,6 +123,8 @@ class ApiClient {
   async getInvoiceById(id) { return this.request(`/invoices/${id}`); }
   async createInvoice(data) { return this.request('/invoices', { method: 'POST', body: data }); }
   async updateInvoice(id, data) { return this.request(`/invoices/${id}`, { method: 'PUT', body: data }); }
+  async markInvoicePaid(id) { return this.request(`/invoices/${id}/mark-paid`, { method: 'POST' }); }
+  async sendInvoiceReminder(id) { return this.request(`/invoices/${id}/send-reminder`, { method: 'POST' }); }
 
   // Payments
   async createPaymentOrder(data) { return this.request('/payments/create-order', { method: 'POST', body: data }); }
@@ -163,6 +167,18 @@ class ApiClient {
   async assignRM(data) { return this.request('/rm/assignments', { method: 'POST', body: data }); }
   async updateRMAssignment(id, data) { return this.request(`/rm/assignments/${id}`, { method: 'PUT', body: data }); }
   async unassignRM(id) { return this.request(`/rm/assignments/${id}`, { method: 'DELETE' }); }
+
+  // Service Categories
+  async getServiceCategories(activeOnly = false) { return this.request(`/service-categories?active=${activeOnly}`); }
+  async createServiceCategory(data) { return this.request('/service-categories', { method: 'POST', body: data }); }
+  async updateServiceCategory(id, data) { return this.request(`/service-categories/${id}`, { method: 'PUT', body: data }); }
+  async deleteServiceCategory(id) { return this.request(`/service-categories/${id}`, { method: 'DELETE' }); }
+
+  // Document Field Types
+  async getDocumentFieldTypes(activeOnly = true) { return this.request(`/document-field-types?active=${activeOnly}`); }
+  async createDocumentFieldType(data) { return this.request('/document-field-types', { method: 'POST', body: data }); }
+  async updateDocumentFieldType(id, data) { return this.request(`/document-field-types/${id}`, { method: 'PUT', body: data }); }
+  async deleteDocumentFieldType(id) { return this.request(`/document-field-types/${id}`, { method: 'DELETE' }); }
 
   // Document uploads
   async uploadDocuments(applicationId, formData) {

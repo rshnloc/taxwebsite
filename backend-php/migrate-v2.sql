@@ -174,3 +174,82 @@ INSERT IGNORE INTO client_types (name, slug, description, required_fields) VALUE
   ('Individual',       'individual',       'Single person / salaried client',    '["pan"]'),
   ('Company',          'company',          'Registered company / business',       '["pan","gst","company_name"]'),
   ('Channel Partner',  'channel-partner',  'Partner who brings in other clients', '["pan","company_name"]');
+
+-- ── Dynamic Document Fields (v3) ──────────────────────────
+ALTER TABLE service_documents
+  ADD COLUMN IF NOT EXISTS password_enabled TINYINT(1) DEFAULT 0 AFTER is_mandatory,
+  ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0 AFTER password_enabled;
+
+ALTER TABLE application_documents
+  ADD COLUMN IF NOT EXISTS field_name VARCHAR(255) DEFAULT NULL AFTER category;
+
+-- ── Service Icon URL (v4) ─────────────────────────────────
+ALTER TABLE services MODIFY COLUMN icon VARCHAR(20) DEFAULT '📄';
+ALTER TABLE services ADD COLUMN IF NOT EXISTS icon_url VARCHAR(500) DEFAULT NULL AFTER icon;
+
+-- ── Document Field Types (v4) ─────────────────────────────
+CREATE TABLE IF NOT EXISTS document_field_types (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(255) NOT NULL UNIQUE,
+  description VARCHAR(500) DEFAULT NULL,
+  icon        VARCHAR(10)  DEFAULT '📄',
+  is_active   TINYINT(1)   DEFAULT 1,
+  sort_order  INT          DEFAULT 0,
+  created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+INSERT IGNORE INTO document_field_types (name, description, icon, sort_order) VALUES
+  ('PAN Card',         'Permanent Account Number card',              '🪪', 1),
+  ('Aadhaar Card',     'UIDAI Aadhaar identity card (front & back)', '🪪', 2),
+  ('Passport',         'Valid passport copy',                        '🛂', 3),
+  ('Passport Photo',   'Recent passport-size photograph',            '🖼️', 4),
+  ('Voter ID',         'Election Commission voter identity card',    '🗳️', 5),
+  ('Driving Licence',  'Valid driving licence',                      '🚗', 6),
+  ('Bank Statement',   'Last 6 months bank statement',               '🏦', 7),
+  ('GST Certificate',  'GSTIN registration certificate',             '📜', 8),
+  ('ITR',              'Income Tax Return filing copy',              '📄', 9),
+  ('Form 16',          'Employer-issued Form 16',                    '📄', 10),
+  ('Utility Bill',     'Electricity / water / gas bill',             '💡', 11),
+  ('Rent Agreement',   'Rental / lease agreement',                   '🏠', 12),
+  ('Company PAN',      'Company Permanent Account Number',           '🏢', 13),
+  ('MOA / AOA',        'Memorandum and Articles of Association',     '📑', 14),
+  ('Certificate of Incorporation', 'Company incorporation certificate', '🏢', 15),
+  ('Digital Signature','DSC (Class 2/3)',                            '🔑', 16),
+  ('Cancelled Cheque', 'Cancelled cheque for bank details',         '🏦', 17),
+  ('Salary Slip',      'Last 3 months salary slips',                '💼', 18),
+  ('Property Documents','Sale deed / ownership proof',              '🏘️', 19),
+  ('Other',            'Any other supporting document',             '📎', 20);
+
+-- Service Categories table
+CREATE TABLE IF NOT EXISTS service_categories (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(100) NOT NULL,
+  slug        VARCHAR(100) NOT NULL UNIQUE,
+  icon        VARCHAR(20)  DEFAULT '📁',
+  description TEXT,
+  sort_order  INT          DEFAULT 0,
+  is_active   TINYINT(1)   DEFAULT 1,
+  created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed default categories from existing hardcoded list
+INSERT IGNORE INTO service_categories (name, slug, icon, sort_order) VALUES
+  ('Tax',          'tax',          '🧾', 1),
+  ('Registration', 'registration', '🏢', 2),
+  ('Compliance',   'compliance',   '✅', 3),
+  ('Licensing',    'licensing',    '📜', 4),
+  ('Legal',        'legal',        '⚖️', 5),
+  ('Other',        'other',        '📄', 99);
+
+-- User profile extras (v5)
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS alt_phone VARCHAR(20) DEFAULT NULL AFTER phone,
+  ADD COLUMN IF NOT EXISTS avatar VARCHAR(500) DEFAULT NULL AFTER alt_phone;
+
+-- Timeline entry type (v5)
+ALTER TABLE application_timeline
+  ADD COLUMN IF NOT EXISTS entry_type ENUM('status_change','remark','feedback','document') DEFAULT 'status_change' AFTER message,
+  ADD COLUMN IF NOT EXISTS is_internal TINYINT(1) DEFAULT 0 AFTER entry_type;
+-- Back-fill existing rows
+UPDATE application_timeline SET entry_type = 'status_change' WHERE entry_type IS NULL OR entry_type = '';

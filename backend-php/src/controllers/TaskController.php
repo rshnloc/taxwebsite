@@ -112,9 +112,36 @@ class TaskController {
         ]);
         $id = (int)$db->lastInsertId();
 
-        // Notify
+        // In-app notification
         $db->prepare("INSERT INTO notifications (user_id, title, message, type, link) VALUES (?, 'New Task', ?, 'task', ?)")
            ->execute([$data['assignedTo'], "New task: " . ($data['title'] ?? ''), "/employee/tasks/$id"]);
+
+        // Email to assignee
+        if (!empty($data['assignedTo'])) {
+            try {
+                $assigneeStmt = $db->prepare("SELECT name, email FROM users WHERE id = ?");
+                $assigneeStmt->execute([$data['assignedTo']]);
+                $assignee = $assigneeStmt->fetch();
+                if ($assignee) {
+                    // Get application/client info if linked
+                    $appId = null; $clientName = null;
+                    if (!empty($data['application'])) {
+                        $appStmt = $db->prepare("SELECT a.application_id, u.name as client_name FROM applications a LEFT JOIN users u ON a.client_id = u.id WHERE a.id = ?");
+                        $appStmt->execute([$data['application']]);
+                        $appRow = $appStmt->fetch();
+                        if ($appRow) { $appId = $appRow['application_id']; $clientName = $appRow['client_name']; }
+                    }
+                    Mailer::sendTaskAssignedEmail(
+                        $assignee['email'], $assignee['name'],
+                        $data['title'] ?? '', $data['description'] ?? '',
+                        $data['priority'] ?? 'medium', $data['dueDate'] ?? null,
+                        $appId, $clientName
+                    );
+                }
+            } catch (Throwable $e) {
+                appLog('error', 'Failed to send task assigned email', ['taskId' => $id, 'error' => $e->getMessage()]);
+            }
+        }
 
         $stmt = $db->prepare("SELECT * FROM tasks WHERE id = ?"); $stmt->execute([$id]);
         jsonResponse(['task' => self::formatTask($stmt->fetch(), $db)], 201);

@@ -19,7 +19,7 @@ export default function EmployeeDashboard() {
   const fetchData = async () => {
     try {
       const [dashData, tasksData, appsData] = await Promise.all([
-        api.getDashboardStats(),
+        api.getEmployeeDashboard(),
         api.getMyTasks(),
         api.getApplications({ limit: 5 })
       ]);
@@ -45,7 +45,14 @@ export default function EmployeeDashboard() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Welcome, {user?.name}!</h1>
-          <p className="text-slate-500 mt-1">Here's your work overview</p>
+          <p className="text-slate-500 mt-1">
+            <span className="inline-flex items-center gap-1">
+              <span className="capitalize font-medium text-primary-600">{user?.role}</span>
+              {user?.designation && <span>· {user.designation}</span>}
+              {user?.department && <span>· {user.department}</span>}
+            </span>
+            {' '}· Here&apos;s your work overview
+          </p>
         </div>
 
         {/* Stats */}

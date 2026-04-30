@@ -31,12 +31,14 @@ class DocumentController {
             jsonResponse(['error' => 'Access denied'], 403);
         }
 
-        if (empty($_FILES['files'])) {
+        // Accept field name 'files' or 'documents'
+        $filesInput = $_FILES['files'] ?? $_FILES['documents'] ?? null;
+        if (empty($filesInput)) {
             jsonResponse(['error' => 'No files uploaded'], 422);
         }
 
-        // Normalize $_FILES['files'] into array of individual files
-        $files = self::normalizeFileArray($_FILES['files']);
+        // Normalize into array of individual files
+        $files = self::normalizeFileArray($filesInput);
         if (empty($files)) jsonResponse(['error' => 'No valid files'], 422);
 
         $uploadDir = __DIR__ . '/../../uploads/' . $applicationId . '/';
@@ -86,13 +88,14 @@ class DocumentController {
 
             $docName  = $_POST['names'][$i] ?? $file['name'];
             $category = $_POST['categories'][$i] ?? 'general';
+            $fieldName = $_POST['fieldNames'][$i] ?? null;
 
             // Save metadata
             $ins = $db->prepare("
                 INSERT INTO application_documents
                   (application_id, name, original_name, path, mime_type, size,
-                   uploaded_by, category, is_password_protected, doc_password_enc, doc_password_hint, upload_status)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')
+                   uploaded_by, category, field_name, is_password_protected, doc_password_enc, doc_password_hint, upload_status)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'pending')
             ");
             $ins->execute([
                 $applicationId,
@@ -103,6 +106,7 @@ class DocumentController {
                 $file['size'],
                 $user['id'],
                 $category,
+                $fieldName,
                 $isPwdProtected,
                 $encPassword,
                 $hint,
@@ -152,7 +156,7 @@ class DocumentController {
         }
 
         $docs = $db->prepare("
-            SELECT id, name, original_name, path, mime_type, size, category,
+            SELECT id, name, original_name, path, mime_type, size, category, field_name,
                    is_password_protected, doc_password_hint, upload_status, uploaded_at,
                    uploaded_by
             FROM application_documents WHERE application_id = ?
@@ -167,6 +171,7 @@ class DocumentController {
             'mimeType'            => $d['mime_type'],
             'size'                => (int)$d['size'],
             'category'            => $d['category'],
+            'fieldName'           => $d['field_name'],
             'isPasswordProtected' => (bool)$d['is_password_protected'],
             'passwordHint'        => $d['doc_password_hint'],
             'uploadStatus'        => $d['upload_status'],

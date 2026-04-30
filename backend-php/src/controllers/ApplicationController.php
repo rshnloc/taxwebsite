@@ -25,12 +25,16 @@ class ApplicationController {
             $employee = formatUser($s->fetch());
         }
         // Load documents
-        $s = $db->prepare("SELECT * FROM application_documents WHERE application_id = ? AND is_completed = 0");
+        $s = $db->prepare("SELECT * FROM application_documents WHERE application_id = ? AND (is_completed = 0 OR is_completed IS NULL) ORDER BY uploaded_at");
         $s->execute([$id]);
         $docs = array_map(fn($d) => [
+            'id' => (int)$d['id'],
             'name' => $d['name'], 'originalName' => $d['original_name'], 'path' => $d['path'],
             'mimeType' => $d['mime_type'], 'size' => (int)$d['size'],
             'uploadedAt' => $d['uploaded_at'], 'category' => $d['category'],
+            'fieldName' => $d['field_name'] ?? null,
+            'isPasswordProtected' => (bool)($d['is_password_protected'] ?? 0),
+            'uploadStatus' => $d['upload_status'] ?? 'pending',
         ], $s->fetchAll());
 
         $s = $db->prepare("SELECT * FROM application_documents WHERE application_id = ? AND is_completed = 1");
@@ -53,7 +57,11 @@ class ApplicationController {
         $s = $db->prepare("SELECT t.*, u.name as updater_name, u.role as updater_role FROM application_timeline t LEFT JOIN users u ON t.updated_by = u.id WHERE t.application_id = ? ORDER BY t.created_at");
         $s->execute([$id]);
         $timeline = array_map(fn($t) => [
-            'status' => $t['status'], 'message' => $t['message'], 'timestamp' => $t['created_at'],
+            'id' => (int)$t['id'],
+            'status' => $t['status'], 'message' => $t['message'],
+            'entryType' => $t['entry_type'] ?? 'status_change',
+            'isInternal' => (bool)($t['is_internal'] ?? 0),
+            'timestamp' => $t['created_at'],
             'updatedBy' => $t['updated_by'] ? ['_id' => (string)$t['updated_by'], 'name' => $t['updater_name'], 'role' => $t['updater_role']] : null,
         ], $s->fetchAll());
 
@@ -158,7 +166,15 @@ class ApplicationController {
     // POST /api/applications
     public static function createApplication() {
         Auth::protect();
+        // Support both JSON body and multipart/form-data
         $data = getJsonInput();
+        if (empty($data)) {
+            // Fallback: read from $_POST (multipart/form-data)
+            $data = $_POST;
+            if (isset($data['formData']) && is_string($data['formData'])) {
+                $data['formData'] = json_decode($data['formData'], true) ?: [];
+            }
+        }
         $db = getDb();
 
         $serviceId = $data['serviceId'] ?? null;
@@ -283,7 +299,7 @@ class ApplicationController {
         }
         $db->prepare("UPDATE applications SET status = ?$extra WHERE id = ?")->execute($extraParams);
 
-        $db->prepare("INSERT INTO application_timeline (application_id, status, message, updated_by) VALUES (?,?,?,?)")
+        $db->prepare("INSERT INTO application_timeline (application_id, status, message, entry_type, updated_by) VALUES (?,?,?,'status_change',?)")
            ->execute([$id, $status, $message, Auth::userId()]);
 
         // Notify client
@@ -294,13 +310,53 @@ class ApplicationController {
         $client = $clientStmt->fetch();
         if ($client) {
             try {
-                Mailer::queueTemplate($db, 'application-status-update', $client['email'], $client['name'], [
-                    'applicationId' => $a['application_id'],
-                    'status' => $status,
-                    'message' => $message,
-                ]);
+                Mailer::sendStatusUpdateEmail($client['email'], $client['name'], $a['application_id'], $status, $message);
             } catch (Throwable $e) {
-                appLog('error', 'Failed to queue application update email', ['applicationId' => $id, 'error' => $e->getMessage()]);
+                appLog('error', 'Failed to send status update email to client', ['applicationId' => $id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        // Also email all admins (super admin notification)
+        try {
+            $admins = $db->query("SELECT name, email FROM users WHERE role = 'admin' AND is_active = 1")->fetchAll();
+            foreach ($admins as $admin) {
+                Mailer::sendStatusUpdateEmail(
+                    $admin['email'], $admin['name'], $a['application_id'], $status, $message,
+                    true, $client['name'] ?? null
+                );
+            }
+        } catch (Throwable $e) {
+            appLog('error', 'Failed to send status update email to admin', ['applicationId' => $id, 'error' => $e->getMessage()]);
+        }
+
+        $stmt = $db->prepare("SELECT * FROM applications WHERE id = ?");
+        $stmt->execute([$id]);
+        jsonResponse(['application' => self::formatApp($stmt->fetch(), $db)]);
+    }
+
+    // POST /api/applications/:id/remarks
+    public static function addRemark($id) {
+        Auth::protect(); Auth::authorize('admin', 'employee');
+        $data = getJsonInput();
+        $db = getDb();
+        $message = trim($data['message'] ?? '');
+        $isInternal = !empty($data['isInternal']) ? 1 : 0;
+        if (!$message) jsonResponse(['error' => 'Message is required'], 422);
+
+        $stmt = $db->prepare("SELECT a.*, u.email AS client_email, u.name AS client_name, a.application_id AS app_ref FROM applications a JOIN users u ON u.id = a.client_id WHERE a.id = ?");
+        $stmt->execute([$id]);
+        $a = $stmt->fetch();
+        if (!$a) jsonResponse(['error' => 'Application not found'], 404);
+
+        $db->prepare("INSERT INTO application_timeline (application_id, status, message, entry_type, is_internal, updated_by) VALUES (?,?,?,'remark',?,?)")
+           ->execute([$id, $a['status'], $message, $isInternal, Auth::userId()]);
+
+        if (!$isInternal) {
+            createNotification($db, $a['client_id'], 'New Update', "A remark was added to your application {$a['app_ref']}", 'application', "/dashboard/applications/$id", 'in_app', ['applicationId' => $id]);
+            try {
+                Mailer::sendStatusUpdateEmail($a['client_email'], $a['client_name'], $a['app_ref'], $a['status'], $message);
+            } catch (Throwable $e) {
+                appLog('error', 'Failed to send remark email', ['applicationId' => $id, 'error' => $e->getMessage()]);
             }
         }
 
@@ -323,11 +379,59 @@ class ApplicationController {
 
         $db->prepare("UPDATE applications SET assigned_employee_id = ? WHERE id = ?")->execute([$employeeId, $id]);
 
-        $db->prepare("INSERT INTO application_timeline (application_id, status, message, updated_by) VALUES (?,?,?,?)")
-           ->execute([$id, $a['status'], 'Employee assigned', Auth::userId()]);
+        $db->prepare("INSERT INTO application_timeline (application_id, status, message, entry_type, updated_by) VALUES (?,?,?,'status_change',?)")
+            ->execute([$id, $a['status'], 'Employee assigned', Auth::userId()]);
+
+        // Auto-create chat room between client and employee
+        if ($employeeId && isset($a['user_id']) && $a['user_id']) {
+            $existingRoom = $db->prepare("SELECT id FROM chat_rooms WHERE application_id = ?");
+            $existingRoom->execute([$id]);
+            $roomRow = $existingRoom->fetch();
+            if (!$roomRow) {
+                $db->prepare("INSERT INTO chat_rooms (application_id) VALUES (?)")->execute([$id]);
+                $chatRoomId = (int)$db->lastInsertId();
+                $addP = $db->prepare("INSERT IGNORE INTO chat_room_participants (room_id, user_id) VALUES (?,?)");
+                $addP->execute([$chatRoomId, $a['user_id']]);
+                $addP->execute([$chatRoomId, $employeeId]);
+                $db->prepare("INSERT INTO messages (room_id, sender_id, content, type, delivered_at) VALUES (?,?,?,?,NOW())")
+                    ->execute([$chatRoomId, Auth::userId(), 'Chat opened — your CA has been assigned.', 'system']);
+                $db->prepare("UPDATE chat_rooms SET last_message_content=?, last_message_sender_id=?, last_message_timestamp=NOW(), updated_at=NOW() WHERE id=?")
+                    ->execute(['Chat opened — your CA has been assigned.', Auth::userId(), $chatRoomId]);
+            } else {
+                $addP = $db->prepare("INSERT IGNORE INTO chat_room_participants (room_id, user_id) VALUES (?,?)");
+                $addP->execute([$roomRow['id'], $employeeId]);
+                $addP->execute([$roomRow['id'], $a['user_id']]);
+            }
+        }
 
         // Notify employee
         createNotification($db, $employeeId, 'New Task Assigned', "You have been assigned application {$a['application_id']}", 'task', "/employee/applications/$id", 'in_app', ['applicationId' => $id]);
+
+        // Email client about assignment
+        if ($employeeId && isset($a['user_id']) && $a['user_id']) {
+            try {
+                $clientStmt = $db->prepare("SELECT name, email FROM users WHERE id = ?");
+                $clientStmt->execute([$a['user_id']]);
+                $clientRow = $clientStmt->fetch();
+                $empStmt = $db->prepare("SELECT name FROM users WHERE id = ?");
+                $empStmt->execute([$employeeId]);
+                $empRow = $empStmt->fetch();
+                if ($clientRow && $clientRow['email'] && $empRow) {
+                    $svcStmt = $db->prepare("SELECT s.name FROM applications ap LEFT JOIN services s ON ap.service_id = s.id WHERE ap.id = ?");
+                    $svcStmt->execute([$id]);
+                    $svcRow = $svcStmt->fetch();
+                    $serviceName = $svcRow ? ($svcRow['name'] ?? 'your service') : 'your service';
+                    Mailer::sendStatusUpdateEmail(
+                        $clientRow['email'], $clientRow['name'],
+                        $a['application_id'],
+                        $a['status'],
+                        "Your application for $serviceName has been assigned to {$empRow['name']}. You can now communicate with your CA via the chat feature."
+                    );
+                }
+            } catch (Throwable $e) {
+                appLog('error', 'Failed to send assignment email to client', ['appId' => $id, 'error' => $e->getMessage()]);
+            }
+        }
 
         $stmt = $db->prepare("SELECT * FROM applications WHERE id = ?");
         $stmt->execute([$id]);

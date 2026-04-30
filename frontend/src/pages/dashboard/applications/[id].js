@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import DashboardLayout from '../../../components/layout/DashboardLayout';
 import { StatusBadge, PageLoading } from '../../../components/ui';
 import api from '../../../lib/api';
-import { FileText, Upload, Clock, User, MessageSquare, Download } from 'lucide-react';
+import { FileText, Upload, Clock, User, MessageSquare, Download, Lock, CheckCircle, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
@@ -29,18 +29,43 @@ export default function ApplicationDetail() {
     }
   };
 
-  const handleFileUpload = async (e) => {
+  const handleFileUpload = async (e, fieldName = null) => {
     const formData = new FormData();
     for (const file of e.target.files) {
-      formData.append('documents', file);
+      formData.append('files', file);
+    }
+    if (fieldName) {
+      for (let i = 0; i < e.target.files.length; i++) {
+        formData.append(`names[${i}]`, fieldName);
+        formData.append(`fieldNames[${i}]`, fieldName);
+      }
+    } else {
+      for (let i = 0; i < e.target.files.length; i++) {
+        formData.append(`names[${i}]`, e.target.files[i].name);
+      }
     }
     try {
       await api.uploadDocuments(id, formData);
-      toast.success('Documents uploaded!');
+      toast.success('Document uploaded!');
       fetchApplication();
     } catch (error) {
       toast.error(error.message);
     }
+  };
+
+  // Group uploaded docs by fieldName
+  const getDocsByField = (docs, fields) => {
+    const grouped = {};
+    const fieldNames = (fields || []).map(f => f.name);
+    // Configured fields
+    fieldNames.forEach(fn => { grouped[fn] = []; });
+    // Place docs into groups
+    (docs || []).forEach(doc => {
+      const key = doc.fieldName || doc.name || 'Other';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(doc);
+    });
+    return grouped;
   };
 
   if (loading) return <DashboardLayout><PageLoading /></DashboardLayout>;
@@ -66,22 +91,58 @@ export default function ApplicationDetail() {
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                 <Clock size={18} className="inline mr-2" />Application Timeline
               </h2>
-              <div className="space-y-4">
-                {application.timeline?.map((entry, i) => (
-                  <div key={i} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className="w-3 h-3 bg-primary-600 rounded-full" />
-                      {i < application.timeline.length - 1 && <div className="w-px h-full bg-slate-200 dark:bg-slate-700" />}
-                    </div>
-                    <div className="pb-4">
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">{entry.message}</p>
-                      <p className="text-xs text-slate-500">
-                        {format(new Date(entry.timestamp), 'dd MMM yyyy, HH:mm')}
-                        {entry.updatedBy?.name && ` • ${entry.updatedBy.name}`}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-0">
+                {[...(application.timeline || [])].reverse()
+                  .filter(entry => !entry.isInternal)
+                  .map((entry, i, arr) => {
+                    const isRemark = entry.entryType === 'remark';
+                    const dotColor = entry.status === 'completed' ? 'bg-green-500' :
+                      entry.status === 'rejected' || entry.status === 'cancelled' ? 'bg-red-500' :
+                      entry.status === 'in-progress' ? 'bg-blue-500' :
+                      isRemark ? 'bg-violet-400' : 'bg-primary-600';
+                    return (
+                      <div key={i} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className={`w-3 h-3 rounded-full flex-shrink-0 mt-1 ${dotColor}`} />
+                          {i < arr.length - 1 && <div className="w-px flex-1 bg-slate-200 dark:bg-slate-700 mt-1 min-h-4" />}
+                        </div>
+                        <div className="pb-4 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {!isRemark && (
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold capitalize ${
+                                entry.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                entry.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                entry.status === 'in-progress' ? 'bg-blue-100 text-blue-700' :
+                                entry.status === 'pending-documents' ? 'bg-orange-100 text-orange-700' :
+                                'bg-slate-100 text-slate-600'
+                              }`}>{(entry.status || '').replace(/-/g, ' ')}</span>
+                            )}
+                            {isRemark && (
+                              <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-violet-100 text-violet-700">
+                                💬 Update from team
+                              </span>
+                            )}
+                          </div>
+                          {entry.message && (
+                            <p className={`text-sm mt-1.5 rounded-lg px-3 py-2 ${
+                              isRemark
+                                ? 'bg-violet-50 dark:bg-violet-900/10 text-slate-700 dark:text-slate-300 border border-violet-200 dark:border-violet-800'
+                                : 'bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300'
+                            }`}>{entry.message}</p>
+                          )}
+                          <p className="text-xs text-slate-400 mt-1">
+                            {entry.timestamp && !isNaN(new Date(entry.timestamp))
+                              ? format(new Date(entry.timestamp), 'dd MMM yyyy, HH:mm')
+                              : ''}
+                            {entry.updatedBy?.name && ` • ${entry.updatedBy.name}`}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                {(application.timeline || []).filter(e => !e.isInternal).length === 0 && (
+                  <p className="text-sm text-slate-500">No timeline entries yet.</p>
+                )}
               </div>
             </div>
 
@@ -93,33 +154,110 @@ export default function ApplicationDetail() {
                 </h2>
                 <label className="btn-primary btn-sm cursor-pointer">
                   <Upload size={16} className="mr-1" /> Upload
-                  <input type="file" multiple className="hidden" onChange={handleFileUpload}
+                  <input type="file" multiple className="hidden" onChange={e => handleFileUpload(e)}
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" />
                 </label>
               </div>
-              
-              {application.documents?.length > 0 ? (
-                <div className="space-y-2">
-                  {application.documents.map((doc, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <FileText size={18} className="text-primary-500" />
-                        <div>
-                          <p className="text-sm font-medium text-slate-900 dark:text-white">{doc.name}</p>
-                          <p className="text-xs text-slate-500">
-                            {doc.size ? `${(doc.size / 1024).toFixed(1)} KB` : ''} • {format(new Date(doc.uploadedAt), 'dd MMM yyyy')}
-                          </p>
+
+              {/* Configured required-document fields */}
+              {application.service?.requiredDocuments?.length > 0 ? (() => {
+                const grouped = getDocsByField(application.documents, application.service.requiredDocuments);
+                return (
+                  <div className="space-y-3">
+                    {application.service.requiredDocuments.map((field, fi) => {
+                      const fieldDocs = grouped[field.name] || [];
+                      const hasDoc = fieldDocs.length > 0;
+                      return (
+                        <div key={fi} className={`rounded-xl border-2 p-3 ${hasDoc ? 'border-green-300 bg-green-50 dark:bg-green-900/10' : field.isMandatory ? 'border-red-200 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {hasDoc
+                                ? <CheckCircle size={15} className="text-green-500" />
+                                : field.isMandatory
+                                  ? <AlertCircle size={15} className="text-red-400" />
+                                  : <FileText size={15} className="text-slate-400" />}
+                              <span className="font-medium text-sm text-slate-900 dark:text-white">{field.name}</span>
+                              {field.isMandatory && !hasDoc && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold">Required</span>
+                              )}
+                              {field.passwordEnabled && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full font-semibold flex items-center gap-0.5"><Lock size={8} />Password</span>
+                              )}
+                            </div>
+                            {!hasDoc && (
+                              <label className="text-xs text-primary-600 hover:text-primary-700 cursor-pointer font-medium">
+                                + Upload
+                                <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                  onChange={e => handleFileUpload(e, field.name)} />
+                              </label>
+                            )}
+                          </div>
+                          {field.description && <p className="text-xs text-slate-500 mb-2 ml-5">{field.description}</p>}
+                          {fieldDocs.map((doc, di) => (
+                            <div key={di} className="flex items-center justify-between px-3 py-2 bg-white dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <FileText size={14} className="text-primary-500 flex-shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate text-slate-800 dark:text-white">{doc.originalName || doc.name}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xs text-slate-400">{doc.size ? `${(doc.size / 1024).toFixed(1)} KB` : ''} · {format(new Date(doc.uploadedAt), 'dd MMM yyyy')}</p>
+                                    {doc.isPasswordProtected && <span className="text-[10px] flex items-center gap-0.5 text-blue-500"><Lock size={8} />Protected</span>}
+                                  </div>
+                                </div>
+                              </div>
+                              <a href={`${process.env.NEXT_PUBLIC_API_URL}/api/${doc.path}`} target="_blank" rel="noreferrer"
+                                className="p-1.5 text-slate-400 hover:text-primary-600">
+                                <Download size={15} />
+                              </a>
+                            </div>
+                          ))}
+                          {!hasDoc && (
+                            <p className="text-xs text-slate-400 italic ml-5">Not uploaded yet</p>
+                          )}
                         </div>
+                      );
+                    })}
+                    {/* Ungrouped docs (uploaded without a field name) */}
+                    {(grouped['Other'] || []).length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Other Documents</p>
+                        {grouped['Other'].map((doc, di) => (
+                          <div key={di} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <FileText size={16} className="text-primary-500" />
+                              <p className="text-sm">{doc.originalName || doc.name}</p>
+                            </div>
+                            <a href={`${process.env.NEXT_PUBLIC_API_URL}/api/${doc.path}`} target="_blank" rel="noreferrer" className="p-1.5 text-slate-400 hover:text-primary-600">
+                              <Download size={15} />
+                            </a>
+                          </div>
+                        ))}
                       </div>
-                      <a href={`${process.env.NEXT_PUBLIC_API_URL}${doc.path}`} target="_blank" rel="noreferrer"
-                        className="p-2 text-slate-400 hover:text-primary-600">
-                        <Download size={16} />
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-slate-500 py-4">No documents uploaded yet</p>
+                    )}
+                  </div>
+                );
+              })() : (
+                /* No configured fields — show flat list */
+                application.documents?.length > 0 ? (
+                  <div className="space-y-2">
+                    {application.documents.map((doc, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <FileText size={18} className="text-primary-500" />
+                          <div>
+                            <p className="text-sm font-medium text-slate-900 dark:text-white">{doc.originalName || doc.name}</p>
+                            <p className="text-xs text-slate-500">{doc.size ? `${(doc.size / 1024).toFixed(1)} KB` : ''} · {format(new Date(doc.uploadedAt), 'dd MMM yyyy')}</p>
+                          </div>
+                        </div>
+                        <a href={`${process.env.NEXT_PUBLIC_API_URL}/api/${doc.path}`} target="_blank" rel="noreferrer" className="p-2 text-slate-400 hover:text-primary-600">
+                          <Download size={16} />
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-slate-500 py-4">No documents uploaded yet</p>
+                )
               )}
             </div>
 
@@ -136,7 +274,7 @@ export default function ApplicationDetail() {
                         <FileText size={18} className="text-green-500" />
                         <span className="text-sm font-medium text-slate-900 dark:text-white">{doc.name}</span>
                       </div>
-                      <a href={`${process.env.NEXT_PUBLIC_API_URL}${doc.path}`} target="_blank" rel="noreferrer"
+                      <a href={`${process.env.NEXT_PUBLIC_API_URL}/api/${doc.path}`} target="_blank" rel="noreferrer"
                         className="btn-primary btn-sm">
                         <Download size={14} className="mr-1" /> Download
                       </a>

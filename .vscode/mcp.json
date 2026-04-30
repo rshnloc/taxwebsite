@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "taxwebsite Docs": {
+      "type": "sse",
+      "url": "https://gitmcp.io/rshnloc/taxwebsite"
+    }
+  }
+}

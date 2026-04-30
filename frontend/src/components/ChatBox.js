@@ -1,92 +1,50 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Send, Paperclip, Image, X, Smile, MoreVertical } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
-import io from 'socket.io-client';
 import clsx from 'clsx';
-
-let socket;
+import api from '../lib/api';
 
 export default function ChatBox({ roomId, otherUser }) {
   const { user } = useAuth();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingUser, setTypingUser] = useState(null);
-  const [connected, setConnected] = useState(false);
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const pollRef = useRef(null);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
+  const fetchMessages = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      const data = await api.getChatMessages(roomId);
+      setMessages(data.messages || []);
+      setTimeout(scrollToBottom, 100);
+    } catch (_) {}
+  }, [roomId, scrollToBottom]);
+
   useEffect(() => {
     if (!roomId) return;
+    fetchMessages();
+    pollRef.current = setInterval(fetchMessages, 5000);
+    return () => clearInterval(pollRef.current);
+  }, [roomId, fetchMessages]);
 
-    const token = localStorage.getItem('token');
-    socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000', {
-      auth: { token }
-    });
-
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
-
-    socket.emit('join_room', roomId);
-
-    socket.on('chat_history', (history) => {
-      setMessages(history);
-      setTimeout(scrollToBottom, 100);
-    });
-
-    socket.on('new_message', (message) => {
-      setMessages(prev => [...prev, message]);
-      setTimeout(scrollToBottom, 100);
-    });
-
-    socket.on('user_typing', ({ userId, userName }) => {
-      if (userId !== user?._id) {
-        setTypingUser(userName);
-        setIsTyping(true);
-      }
-    });
-
-    socket.on('user_stop_typing', () => {
-      setIsTyping(false);
-      setTypingUser(null);
-    });
-
-    return () => {
-      if (socket) {
-        socket.emit('leave_room', roomId);
-        socket.disconnect();
-      }
-    };
-  }, [roomId, user, scrollToBottom]);
-
-  useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
-
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !socket || !roomId) return;
-
-    socket.emit('send_message', {
-      roomId,
-      content: newMessage.trim(),
-      type: 'text'
-    });
+    if (!newMessage.trim() || sending) return;
+    setSending(true);
+    const content = newMessage.trim();
     setNewMessage('');
-    socket.emit('stop_typing', roomId);
-  };
-
-  const handleTyping = () => {
-    if (!socket || !roomId) return;
-    socket.emit('typing', roomId);
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('stop_typing', roomId);
-    }, 2000);
+    try {
+      await api.sendMessage(roomId, { content, type: 'text' });
+      await fetchMessages();
+    } catch (_) {} finally {
+      setSending(false);
+    }
   };
 
   const formatMessageDate = (date) => {
@@ -104,28 +62,20 @@ export default function ChatBox({ roomId, otherUser }) {
   }, {});
 
   const isOwnMessage = (msg) => {
-    return msg.sender?._id === user?._id || msg.sender === user?._id;
+    return msg.sender?._id === user?._id || String(msg.sender?._id) === String(user?.id);
   };
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
       {/* Chat Header */}
       {otherUser && (
-        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/80">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary-500 text-white flex items-center justify-center font-semibold text-sm">
-              {otherUser.name?.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{otherUser.name}</h3>
-              <p className="text-xs text-slate-500">
-                {connected ? (
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-green-500"></span> Online
-                  </span>
-                ) : 'Connecting...'}
-              </p>
-            </div>
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/80">
+          <div className="w-10 h-10 rounded-full bg-primary-500 text-white flex items-center justify-center font-semibold text-sm">
+            {otherUser.name?.charAt(0).toUpperCase() || '?'}
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{otherUser.name}</h3>
+            <p className="text-xs text-slate-500">{otherUser.role || 'Support'}</p>
           </div>
         </div>
       )}
@@ -135,16 +85,12 @@ export default function ChatBox({ roomId, otherUser }) {
         {Object.entries(groupedMessages).map(([date, msgs]) => (
           <div key={date}>
             <div className="flex items-center justify-center my-3">
-              <span className="text-xs text-slate-500 bg-slate-100 dark:bg-slate-700 dark:text-slate-400 px-3 py-1 rounded-full">
-                {date}
-              </span>
+              <span className="text-xs text-slate-500 bg-slate-100 dark:bg-slate-700 dark:text-slate-400 px-3 py-1 rounded-full">{date}</span>
             </div>
             {msgs.map((msg, idx) => (
               <div key={msg._id || idx} className={clsx('flex mb-2', isOwnMessage(msg) ? 'justify-end' : 'justify-start')}>
                 {msg.type === 'system' ? (
-                  <div className="text-xs text-slate-500 dark:text-slate-400 text-center w-full italic">
-                    {msg.content}
-                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 text-center w-full italic py-1">{msg.content}</div>
                 ) : (
                   <div className={clsx(
                     'max-w-[75%] px-4 py-2 rounded-2xl text-sm',
@@ -158,11 +104,8 @@ export default function ChatBox({ roomId, otherUser }) {
                       </p>
                     )}
                     <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                    <p className={clsx(
-                      'text-[10px] mt-1 text-right',
-                      isOwnMessage(msg) ? 'text-primary-100' : 'text-slate-400'
-                    )}>
-                      {format(new Date(msg.createdAt), 'hh:mm a')}
+                    <p className={clsx('text-[10px] mt-1 text-right', isOwnMessage(msg) ? 'text-primary-100' : 'text-slate-400')}>
+                      {msg.createdAt ? format(new Date(msg.createdAt), 'hh:mm a') : ''}
                     </p>
                   </div>
                 )}
@@ -170,17 +113,6 @@ export default function ChatBox({ roomId, otherUser }) {
             ))}
           </div>
         ))}
-
-        {isTyping && (
-          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-            <div className="flex gap-1">
-              <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-              <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-              <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-            </div>
-            <span>{typingUser} is typing...</span>
-          </div>
-        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -189,13 +121,13 @@ export default function ChatBox({ roomId, otherUser }) {
         <input
           type="text"
           value={newMessage}
-          onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
+          onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type a message..."
           className="flex-1 px-4 py-2 rounded-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <button
           type="submit"
-          disabled={!newMessage.trim()}
+          disabled={!newMessage.trim() || sending}
           className="w-10 h-10 rounded-full bg-primary-500 hover:bg-primary-600 text-white flex items-center justify-center disabled:opacity-50 transition-colors"
         >
           <Send size={18} />
@@ -204,3 +136,5 @@ export default function ChatBox({ roomId, otherUser }) {
     </div>
   );
 }
+
+

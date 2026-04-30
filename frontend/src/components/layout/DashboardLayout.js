@@ -5,7 +5,7 @@ import { useTheme } from '../../context/ThemeContext';
 import {
   LayoutDashboard, Users, FileText, ClipboardList, Settings, LogOut,
   MessageSquare, Receipt, Bell, BarChart3, Sun, Moon, ChevronLeft,
-  Briefcase, FolderOpen, CreditCard, User, Building2, Shield, UserCheck
+  Briefcase, FolderOpen, CreditCard, User, Building2, Shield, UserCheck, Tags
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -16,12 +16,14 @@ const adminLinks = [
   { href: '/admin/employees', label: 'Employees', icon: Briefcase },
   { href: '/admin/tasks', label: 'Tasks', icon: ClipboardList },
   { href: '/admin/services', label: 'Services', icon: FileText },
+  { href: '/admin/document-fields', label: 'Document Fields', icon: Tags },
   { href: '/admin/invoices', label: 'Invoices', icon: Receipt },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { href: '/admin/chat', label: 'Messages', icon: MessageSquare },
   { href: '/admin/roles', label: 'Roles & Permissions', icon: Shield },
   { href: '/admin/client-types', label: 'Client Types', icon: Building2 },
   { href: '/admin/rm-assignments', label: 'RM Assignments', icon: UserCheck },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 const employeeLinks = [
@@ -29,6 +31,7 @@ const employeeLinks = [
   { href: '/employee/tasks', label: 'My Tasks', icon: ClipboardList },
   { href: '/employee/applications', label: 'Applications', icon: FolderOpen },
   { href: '/employee/chat', label: 'Messages', icon: MessageSquare },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 const clientLinks = [
@@ -38,6 +41,7 @@ const clientLinks = [
   { href: '/dashboard/invoices', label: 'Invoices', icon: Receipt },
   { href: '/dashboard/chat', label: 'Messages', icon: MessageSquare },
   { href: '/dashboard/profile', label: 'Profile', icon: User },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function DashboardLayout({ children }) {
@@ -154,17 +158,18 @@ export default function DashboardLayout({ children }) {
             >
               <Bell size={20} />
             </Link>
-            <div className="flex items-center gap-2 pl-3 border-l border-slate-200 dark:border-slate-700">
-              <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
-                <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
-                  {user.name?.charAt(0)}
-                </span>
+            <Link href="/settings" className="flex items-center gap-2 pl-3 border-l border-slate-200 dark:border-slate-700 hover:opacity-80 transition-opacity">
+              <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center overflow-hidden">
+                {user.avatar
+                  ? <img src={`${process.env.NEXT_PUBLIC_API_URL || ''}/api/${user.avatar}`} alt={user.name} className="w-full h-full object-cover" />
+                  : <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">{user.name?.charAt(0)}</span>
+                }
               </div>
               <div className="hidden sm:block">
                 <p className="text-sm font-medium text-slate-900 dark:text-white">{user.name}</p>
                 <p className="text-xs text-slate-500 capitalize">{user.role}</p>
               </div>
-            </div>
+            </Link>
           </div>
         </header>
 

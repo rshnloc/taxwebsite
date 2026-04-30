@@ -27,7 +27,7 @@ class UserController {
         $stmt->execute($params);
         $total = (int)$stmt->fetchColumn();
 
-        $stmt = $db->prepare("SELECT * FROM users $whereSQL ORDER BY created_at DESC LIMIT $limit OFFSET $offset");
+        $stmt = $db->prepare("SELECT u.*, r.id as role_id, r.name as role_name FROM users u LEFT JOIN roles r ON r.id = u.dynamic_role_id $whereSQL ORDER BY u.created_at DESC LIMIT $limit OFFSET $offset");
         $stmt->execute($params);
         $users = array_map('formatUser', $stmt->fetchAll());
 
@@ -41,7 +41,7 @@ class UserController {
     public static function getEmployees() {
         Auth::protect(); Auth::authorize('admin');
         $db = getDb();
-        $stmt = $db->prepare("SELECT * FROM users WHERE role = 'employee' AND is_active = 1 ORDER BY name");
+        $stmt = $db->prepare("SELECT u.*, r.id as role_id, r.name as role_name FROM users u LEFT JOIN roles r ON r.id = u.dynamic_role_id WHERE u.role = 'employee' AND u.is_active = 1 ORDER BY u.name");
         $stmt->execute();
         jsonResponse(['employees' => array_map('formatUser', $stmt->fetchAll())]);
     }
@@ -69,13 +69,19 @@ class UserController {
         if ($stmt->fetch()) jsonResponse(['error' => 'Email already exists'], 400);
 
         $hash = password_hash($data['password'] ?? 'password123', PASSWORD_BCRYPT, ['cost' => 12]);
-        $stmt = $db->prepare("INSERT INTO users (name, email, password, phone, role, department, designation, is_verified) VALUES (?,?,?,?,?,?,?,1)");
+        $roleId = isset($data['roleId']) ? (int)$data['roleId'] : null;
+        $stmt = $db->prepare("INSERT INTO users (name, email, password, phone, role, department, designation, dynamic_role_id, is_verified) VALUES (?,?,?,?,?,?,?,?,1)");
         $stmt->execute([
             $data['name'] ?? '', $email, $hash, $data['phone'] ?? '',
-            $data['role'] ?? 'client', $data['department'] ?? null, $data['designation'] ?? null,
+            $data['role'] ?? 'client', $data['department'] ?? null, $data['designation'] ?? null, $roleId,
         ]);
         $id = (int)$db->lastInsertId();
-        $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+        // Sync user_roles table
+        if ($roleId) {
+            $db->prepare("DELETE FROM user_roles WHERE user_id = ?")->execute([$id]);
+            $db->prepare("INSERT IGNORE INTO user_roles (user_id, role_id, assigned_by) VALUES (?,?,?)")->execute([$id, $roleId, Auth::userId()]);
+        }
+        $stmt = $db->prepare("SELECT u.*, r.id as role_id, r.name as role_name FROM users u LEFT JOIN roles r ON r.id = u.dynamic_role_id WHERE u.id = ?");
         $stmt->execute([$id]);
         jsonResponse(['user' => formatUser($stmt->fetch())], 201);
     }
@@ -90,11 +96,23 @@ class UserController {
         foreach (['name' => 'name', 'phone' => 'phone', 'role' => 'role', 'department' => 'department', 'designation' => 'designation'] as $col => $key) {
             if (isset($data[$key])) { $fields[] = "$col = ?"; $params[] = $data[$key]; }
         }
+        if (array_key_exists('roleId', $data)) {
+            $fields[] = "dynamic_role_id = ?";
+            $params[] = $data['roleId'] ? (int)$data['roleId'] : null;
+        }
         if (isset($data['isActive'])) { $fields[] = "is_active = ?"; $params[] = $data['isActive'] ? 1 : 0; }
 
         if (!$fields) jsonResponse(['error' => 'No fields to update'], 400);
         $params[] = $id;
         $db->prepare("UPDATE users SET " . implode(', ', $fields) . " WHERE id = ?")->execute($params);
+
+        // Sync user_roles table if roleId was updated
+        if (array_key_exists('roleId', $data)) {
+            $db->prepare("DELETE FROM user_roles WHERE user_id = ?")->execute([$id]);
+            if ($data['roleId']) {
+                $db->prepare("INSERT IGNORE INTO user_roles (user_id, role_id, assigned_by) VALUES (?,?,?)")->execute([$id, (int)$data['roleId'], Auth::userId()]);
+            }
+        }
 
         $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
         $stmt->execute([$id]);

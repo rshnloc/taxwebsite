@@ -3,6 +3,7 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import { StatusBadge, PageLoading, EmptyState, Modal } from '../../components/ui';
 import api from '../../lib/api';
 import { ClipboardList, Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import SearchableSelect from '../../components/SearchableSelect';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
@@ -178,17 +179,22 @@ export default function AdminTasks() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="label">Assign To *</label>
-                <select required value={form.assignedTo} onChange={e => setForm({ ...form, assignedTo: e.target.value })} className="input">
-                  <option value="">Select</option>
-                  {employees.map(emp => <option key={emp._id} value={emp._id}>{emp.name}</option>)}
-                </select>
+                <SearchableSelect
+                  required
+                  value={form.assignedTo}
+                  onChange={v => setForm({ ...form, assignedTo: v })}
+                  options={employees.map(emp => ({ value: emp._id, label: emp.name + (emp.designation ? ' — ' + emp.designation : '') }))}
+                  placeholder="Select employee…"
+                />
               </div>
               <div>
                 <label className="label">Application</label>
-                <select value={form.application} onChange={e => setForm({ ...form, application: e.target.value })} className="input">
-                  <option value="">None</option>
-                  {applications.map(app => <option key={app._id} value={app._id}>{app.applicationId}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.application}
+                  onChange={v => setForm({ ...form, application: v })}
+                  options={[{ value: '', label: 'None' }, ...applications.map(app => ({ value: app._id, label: (app.client?.name || 'Unknown') + ' — ' + app.applicationId + ' (' + (app.service?.name || 'N/A') + ')' }))]}
+                  placeholder="None"
+                />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">

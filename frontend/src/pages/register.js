@@ -4,14 +4,27 @@ import Link from 'next/link';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { Mail, Lock, User, Phone, Eye, EyeOff, ArrowRight, Shield, CheckCircle, Star, Users, Sparkles, Zap } from 'lucide-react';
+import { Mail, Lock, User, Phone, Eye, EyeOff, ArrowRight, Shield, CheckCircle, Star, Users, Sparkles, Zap, Building2, UserCheck, Handshake, KeyRound } from 'lucide-react';
+import api from '../lib/api';
+
+const CLIENT_TYPES = [
+  { id: 'individual', label: 'Individual', desc: 'Salaried / Self-employed person', icon: UserCheck },
+  { id: 'company', label: 'Company', desc: 'Registered business / LLP / Pvt Ltd', icon: Building2 },
+  { id: 'channel-partner', label: 'Channel Partner', desc: 'Refer clients & earn', icon: Handshake },
+];
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, login } = useAuth();
   const router = useRouter();
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '', clientType: 'individual' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  // OTP step
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -21,15 +34,87 @@ export default function RegisterPage() {
     if (form.password.length < 6) return toast.error('Password must be at least 6 characters');
     setLoading(true);
     try {
-      await register({ name: form.name, email: form.email, phone: form.phone, password: form.password });
-      toast.success('Account created successfully!');
-      router.push('/dashboard');
+      const result = await register({ name: form.name, email: form.email, phone: form.phone, password: form.password, clientType: form.clientType });
+      if (result.requiresOtp) {
+        setOtpEmail(result.email || form.email);
+        setOtpStep(true);
+        toast.success('OTP sent to your email!');
+      } else {
+        toast.success('Account created successfully!');
+        router.push('/dashboard');
+      }
     } catch (error) {
       toast.error(error.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    if (otp.length !== 6) return toast.error('Enter the 6-digit OTP');
+    setOtpLoading(true);
+    try {
+      const result = await api.verifyOTP(otpEmail, otp);
+      if (result.token) {
+        localStorage.setItem('token', result.token);
+        // reload user context
+        window.location.href = '/dashboard';
+      } else {
+        toast.error('Verification failed');
+      }
+    } catch (error) {
+      toast.error(error.message || 'Invalid or expired OTP');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    setResendLoading(true);
+    try {
+      await api.resendOTP(otpEmail);
+      toast.success('OTP resent!');
+    } catch (error) {
+      toast.error(error.message || 'Failed to resend OTP');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  if (otpStep) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-900 px-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-sm border border-slate-200 dark:border-slate-700 text-center">
+            <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <KeyRound size={28} className="text-primary-600" />
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white mb-2">Verify Your Email</h1>
+            <p className="text-slate-500 text-sm mb-6">We sent a 6-digit OTP to <strong>{otpEmail}</strong></p>
+            <form onSubmit={handleVerifyOTP} className="space-y-4">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                placeholder="Enter 6-digit OTP"
+                className="input text-center text-2xl tracking-widest font-bold"
+              />
+              <motion.button type="submit" disabled={otpLoading || otp.length !== 6} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+                className="btn-primary w-full justify-center text-base py-3.5">
+                {otpLoading ? <span className="spinner w-5 h-5" /> : <span className="flex items-center gap-2">Verify & Continue <ArrowRight size={18} /></span>}
+              </motion.button>
+            </form>
+            <button onClick={handleResendOTP} disabled={resendLoading} className="mt-4 text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50">
+              {resendLoading ? 'Sending...' : "Didn't receive? Resend OTP"}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -144,6 +229,36 @@ export default function RegisterPage() {
                   <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input name="confirmPassword" type="password" required value={form.confirmPassword}
                     onChange={handleChange} className="input pl-10" placeholder="Confirm password" />
+                </div>
+              </div>
+
+              {/* Client Type */}
+              <div>
+                <label className="label">I am a...</label>
+                <div className="grid grid-cols-1 gap-2 mt-1">
+                  {CLIENT_TYPES.map(({ id, label, desc, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, clientType: id }))}
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                        form.clientType === id
+                          ? 'border-primary-600 bg-primary-50 dark:bg-primary-900/20'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+                      }`}
+                    >
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        form.clientType === id ? 'bg-primary-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
+                      }`}>
+                        <Icon size={18} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{label}</p>
+                        <p className="text-xs text-slate-500">{desc}</p>
+                      </div>
+                      {form.clientType === id && <CheckCircle size={16} className="ml-auto text-primary-600 flex-shrink-0" />}
+                    </button>
+                  ))}
                 </div>
               </div>
               <motion.button type="submit" disabled={loading} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}

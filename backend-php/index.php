@@ -29,7 +29,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+// Serve static uploads (service icons etc.)
+if (preg_match('#^/uploads/(.+)$#', $_SERVER['REQUEST_URI'] ?? '', $um)) {
+    $file = __DIR__ . '/uploads/' . $um[1];
+    if (is_file($file)) {
+        $mime = mime_content_type($file) ?: 'application/octet-stream';
+        header('Content-Type: ' . $mime);
+        header('Cache-Control: public, max-age=86400');
+        readfile($file);
+        exit;
+    }
+    http_response_code(404); exit;
+}
+
 // Autoload
+try {
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/src/Database.php';
 require_once __DIR__ . '/src/Auth.php';
@@ -49,6 +63,13 @@ require_once __DIR__ . '/src/controllers/RoleController.php';
 require_once __DIR__ . '/src/controllers/ClientTypeController.php';
 require_once __DIR__ . '/src/controllers/RMController.php';
 require_once __DIR__ . '/src/controllers/DocumentController.php';
+require_once __DIR__ . '/src/controllers/DocumentFieldTypeController.php';
+require_once __DIR__ . '/src/controllers/ServiceCategoryController.php';
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Bootstrap error: ' . $e->getMessage(), 'file' => basename($e->getFile()), 'line' => $e->getLine()]);
+    exit;
+}
 
 // Parse request
 $method = $_SERVER['REQUEST_METHOD'];
@@ -72,9 +93,9 @@ try {
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
-} catch (Exception $e) {
+} catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['error' => $e->getMessage()]);
+    echo json_encode(['error' => $e->getMessage(), 'file' => basename($e->getFile()), 'line' => $e->getLine()]);
 }
 
 function route($method, $uri) {
@@ -83,14 +104,30 @@ function route($method, $uri) {
         jsonResponse(['status' => 'ok', 'timestamp' => date('c'), 'name' => 'Helpshack PHP API']);
     }
 
+    // SMTP test (admin only)
+    if ($uri === '/api/admin/test-email' && $method === 'POST') {
+        Auth::protect(); Auth::authorize('admin');
+        $data = getJsonInput();
+        $to = $data['email'] ?? null;
+        if (!$to) jsonResponse(['error' => 'email required'], 422);
+        try {
+            Mailer::sendOtpEmail($to, 'Test User', '123456');
+            jsonResponse(['success' => true, 'message' => 'Test email sent to ' . $to]);
+        } catch (Throwable $e) {
+            jsonResponse(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
     // ===== AUTH =====
     if ($uri === '/api/auth/register' && $method === 'POST') return AuthController::register();
     if ($uri === '/api/auth/login' && $method === 'POST') return AuthController::login();
     if ($uri === '/api/auth/me' && $method === 'GET') return AuthController::getMe();
     if ($uri === '/api/auth/profile' && $method === 'PUT') return AuthController::updateProfile();
     if ($uri === '/api/auth/change-password' && $method === 'PUT') return AuthController::changePassword();
+    if ($uri === '/api/auth/avatar' && $method === 'POST') return AuthController::uploadAvatar();
     if ($uri === '/api/auth/forgot-password' && $method === 'POST') return AuthController::forgotPassword();
     if ($uri === '/api/auth/verify-otp' && $method === 'POST') return AuthController::verifyOTP();
+    if ($uri === '/api/auth/resend-otp' && $method === 'POST') return AuthController::resendOTP();
 
     // ===== USERS =====
     if ($uri === '/api/users' && $method === 'GET') return UserController::getUsers();
@@ -108,6 +145,9 @@ function route($method, $uri) {
     if (preg_match('#^/api/services/([a-z0-9-]+)/config$#', $uri, $m) && $method === 'GET') {
         return ServiceController::getServiceConfig($m[1]);
     }
+    if (preg_match('#^/api/services/(\d+)/icon$#', $uri, $m) && $method === 'POST') {
+        return ServiceController::uploadIcon($m[1]);
+    }
     if (preg_match('#^/api/services/(\d+)$#', $uri, $m)) {
         if ($method === 'PUT') return ServiceController::updateService($m[1]);
         if ($method === 'DELETE') return ServiceController::deleteService($m[1]);
@@ -123,11 +163,14 @@ function route($method, $uri) {
     if (preg_match('#^/api/applications/(\d+)/status$#', $uri, $m) && in_array($method, ['PUT', 'PATCH'])) {
         return ApplicationController::updateStatus($m[1]);
     }
+    if (preg_match('#^/api/applications/(\d+)/remarks$#', $uri, $m) && $method === 'POST') {
+        return ApplicationController::addRemark($m[1]);
+    }
     if (preg_match('#^/api/applications/(\d+)/assign$#', $uri, $m) && $method === 'PUT') {
         return ApplicationController::assignEmployee($m[1]);
     }
     if (preg_match('#^/api/applications/(\d+)/documents$#', $uri, $m) && $method === 'POST') {
-        return ApplicationController::uploadDocuments($m[1]);
+        return DocumentController::uploadDocuments($m[1]);
     }
     if (preg_match('#^/api/applications/(\d+)$#', $uri, $m)) {
         if ($method === 'GET') return ApplicationController::getApplicationById($m[1]);
@@ -178,6 +221,12 @@ function route($method, $uri) {
     if (preg_match('#^/api/invoices/(\d+)/pdf$#', $uri, $m) && $method === 'GET') {
         return InvoiceController::generatePDF($m[1]);
     }
+    if (preg_match('#^/api/invoices/(\d+)/mark-paid$#', $uri, $m) && in_array($method, ['POST','PUT','PATCH'])) {
+        return InvoiceController::markPaid($m[1]);
+    }
+    if (preg_match('#^/api/invoices/(\d+)/send-reminder$#', $uri, $m) && $method === 'POST') {
+        return InvoiceController::sendReminder($m[1]);
+    }
     if (preg_match('#^/api/invoices/(\d+)$#', $uri, $m)) {
         if ($method === 'GET') return InvoiceController::getInvoiceById($m[1]);
         if ($method === 'PUT') return InvoiceController::updateInvoice($m[1]);
@@ -198,6 +247,13 @@ function route($method, $uri) {
     }
 
     // ===== DASHBOARD =====
+    // Generic /api/dashboard — auto-routes by user role
+    if ($uri === '/api/dashboard' && $method === 'GET') {
+        $u = Auth::protect();
+        if ($u['role'] === 'admin')    return DashboardController::getAdminDashboard();
+        if ($u['role'] === 'employee') return DashboardController::getEmployeeDashboard();
+        return DashboardController::getClientDashboard();
+    }
     if ($uri === '/api/dashboard/admin' && $method === 'GET') return DashboardController::getAdminDashboard();
     if ($uri === '/api/dashboard/employee' && $method === 'GET') return DashboardController::getEmployeeDashboard();
     if ($uri === '/api/dashboard/client' && $method === 'GET') return DashboardController::getClientDashboard();
@@ -253,6 +309,53 @@ function route($method, $uri) {
     }
     if (preg_match('#^/api/documents/(\d+)/status$#', $uri, $m) && in_array($method, ['PUT','PATCH'])) {
         return DocumentController::updateDocumentStatus($m[1]);
+    }
+
+    // ===== MAIL TEST (admin only) =====
+    if ($uri === '/api/mail/test' && $method === 'POST') {
+        Auth::protect(); Auth::authorize('admin');
+        $data = getJsonInput();
+        $to = $data['email'] ?? '';
+        if (!$to) jsonResponse(['error' => 'email required'], 422);
+        try {
+            $config = require __DIR__ . '/config.php';
+            $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->isSMTP();
+            $mail->Host       = $config['MAIL_SMTP_HOST'];
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $config['MAIL_SMTP_USER'];
+            $mail->Password   = $config['MAIL_SMTP_PASS'];
+            $mail->Port       = (int)($config['MAIL_SMTP_PORT'] ?? 465);
+            $mail->SMTPSecure = ($config['MAIL_SMTP_ENC'] ?? 'ssl') === 'tls'
+                ? PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS
+                : PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+            $mail->CharSet = 'UTF-8';
+            $mail->setFrom($config['MAIL_FROM_EMAIL'], $config['MAIL_FROM_NAME']);
+            $mail->addAddress($to);
+            $mail->Subject = 'SMTP Test — Tax CareerXera';
+            $mail->isHTML(true);
+            $mail->Body = '<p>SMTP is working correctly! ✅</p>';
+            $mail->send();
+            jsonResponse(['success' => true, 'message' => "Test email sent to $to"]);
+        } catch (Throwable $e) {
+            jsonResponse(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    // ===== SERVICE CATEGORIES =====
+    if ($uri === '/api/service-categories' && $method === 'GET')  return ServiceCategoryController::getAll();
+    if ($uri === '/api/service-categories' && $method === 'POST') return ServiceCategoryController::create();
+    if (preg_match('#^/api/service-categories/(\d+)$#', $uri, $m)) {
+        if ($method === 'PUT')    return ServiceCategoryController::update($m[1]);
+        if ($method === 'DELETE') return ServiceCategoryController::delete($m[1]);
+    }
+
+    // ===== DOCUMENT FIELD TYPES =====
+    if ($uri === '/api/document-field-types' && $method === 'GET')  return DocumentFieldTypeController::getAll();
+    if ($uri === '/api/document-field-types' && $method === 'POST') return DocumentFieldTypeController::create();
+    if (preg_match('#^/api/document-field-types/(\d+)$#', $uri, $m)) {
+        if ($method === 'PUT')    return DocumentFieldTypeController::update($m[1]);
+        if ($method === 'DELETE') return DocumentFieldTypeController::delete($m[1]);
     }
 
     // 404

@@ -2,7 +2,9 @@
   "name": "helpshack/api",
   "description": "Helpshack CA Platform PHP API",
   "require": {
-    "firebase/php-jwt": "^6.10"
+    "firebase/php-jwt": "^6.10",
+    "phpmailer/phpmailer": "^7.0",
+    "dompdf/dompdf": "^3.1"
   },
   "autoload": {
     "psr-4": {

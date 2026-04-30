@@ -17,6 +17,12 @@ const config: CapacitorConfig = {
       keystoreAlias: undefined,
     },
   },
+  ios: {
+    backgroundColor: '#ffffff',
+    contentInset: 'automatic',
+    allowsLinkPreview: false,
+    scrollEnabled: true,
+  },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,

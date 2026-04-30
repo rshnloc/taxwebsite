@@ -58,8 +58,14 @@ class ChatController {
     public static function getChatRooms() {
         Auth::protect();
         $db = getDb();
-        $stmt = $db->prepare("SELECT cr.* FROM chat_rooms cr JOIN chat_room_participants cp ON cr.id = cp.room_id WHERE cp.user_id = ? AND cr.is_active = 1 ORDER BY cr.updated_at DESC");
-        $stmt->execute([Auth::userId()]);
+        $user = $GLOBALS['auth_user'];
+        if ($user['role'] === 'admin') {
+            // Admin sees all active rooms
+            $stmt = $db->query("SELECT * FROM chat_rooms WHERE is_active = 1 ORDER BY updated_at DESC");
+        } else {
+            $stmt = $db->prepare("SELECT cr.* FROM chat_rooms cr JOIN chat_room_participants cp ON cr.id = cp.room_id WHERE cp.user_id = ? AND cr.is_active = 1 ORDER BY cr.updated_at DESC");
+            $stmt->execute([Auth::userId()]);
+        }
         $rooms = array_map(fn($r) => self::formatRoom($r, $db), $stmt->fetchAll());
         jsonResponse(['rooms' => $rooms]);
     }
@@ -79,7 +85,13 @@ class ChatController {
     public static function getMessages($roomId) {
         Auth::protect();
         $db = getDb();
-        self::ensureParticipant($db, $roomId);
+        $user = $GLOBALS['auth_user'];
+        if ($user['role'] !== 'admin') {
+            self::ensureParticipant($db, $roomId);
+        } else {
+            // Auto-add admin as participant so they can send messages too
+            $db->prepare("INSERT IGNORE INTO chat_room_participants (room_id, user_id) VALUES (?,?)")->execute([$roomId, Auth::userId()]);
+        }
         $page = max(1, (int)($_GET['page'] ?? 1));
         $limit = max(1, (int)($_GET['limit'] ?? 50));
         $offset = ($page - 1) * $limit;
@@ -144,7 +156,13 @@ class ChatController {
         Auth::protect();
         $data = getJsonInput();
         $db = getDb();
-        self::ensureParticipant($db, $roomId);
+        $user = $GLOBALS['auth_user'];
+        if ($user['role'] !== 'admin') {
+            self::ensureParticipant($db, $roomId);
+        } else {
+            // Auto-add admin as participant
+            $db->prepare("INSERT IGNORE INTO chat_room_participants (room_id, user_id) VALUES (?,?)")->execute([$roomId, Auth::userId()]);
+        }
         $content = $data['content'] ?? '';
         $type = $data['type'] ?? 'text';
         $fileUrl = null; $fileName = null;
@@ -181,8 +199,33 @@ class ChatController {
 
         $participantStmt = $db->prepare("SELECT user_id FROM chat_room_participants WHERE room_id = ? AND user_id != ?");
         $participantStmt->execute([$roomId, Auth::userId()]);
-        foreach ($participantStmt->fetchAll() as $participant) {
+        $participants = $participantStmt->fetchAll();
+        foreach ($participants as $participant) {
             createNotification($db, $participant['user_id'], 'New Message', 'You have a new message', 'chat', "/dashboard/chat?room=$roomId", 'in_app', ['roomId' => (int)$roomId, 'messageId' => $msgId]);
+        }
+
+        // Email notification to offline participants (non-system messages only)
+        if ($type !== 'system') {
+            try {
+                $senderStmt = $db->prepare("SELECT name FROM users WHERE id = ?");
+                $senderStmt->execute([Auth::userId()]);
+                $senderRow = $senderStmt->fetch();
+                $senderName = $senderRow ? $senderRow['name'] : 'Someone';
+
+                foreach ($participants as $participant) {
+                    $userStmt = $db->prepare("SELECT name, email FROM users WHERE id = ?");
+                    $userStmt->execute([$participant['user_id']]);
+                    $userRow = $userStmt->fetch();
+                    if ($userRow && $userRow['email']) {
+                        Mailer::sendChatNotificationEmail(
+                            $userRow['email'], $userRow['name'],
+                            $senderName, $content, $roomId
+                        );
+                    }
+                }
+            } catch (Throwable $e) {
+                appLog('error', 'Failed to send chat notification email', ['roomId' => $roomId, 'error' => $e->getMessage()]);
+            }
         }
 
         jsonResponse(['message' => [

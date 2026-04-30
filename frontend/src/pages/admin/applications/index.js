@@ -3,6 +3,7 @@ import DashboardLayout from '../../../components/layout/DashboardLayout';
 import { StatusBadge, PageLoading, EmptyState, Modal } from '../../../components/ui';
 import api from '../../../lib/api';
 import { FileText, Search, Filter, UserPlus, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import SearchableSelect from '../../../components/SearchableSelect';
 import { format } from 'date-fns';
 import { useRouter } from 'next/router';
 import toast from 'react-hot-toast';
@@ -21,6 +22,14 @@ export default function AdminApplications() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedApp, setSelectedApp] = useState(null);
   const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusModalApp, setStatusModalApp] = useState(null);
+  const [statusModalNew, setStatusModalNew] = useState('');
+  const [statusRemark, setStatusRemark] = useState('');
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [invoiceStep, setInvoiceStep] = useState(false); // show invoice prompt after completing
+  const [invoiceForm, setInvoiceForm] = useState({ amount: '', dueDate: '', notes: '' });
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
   useEffect(() => { fetchApplications(); }, [statusFilter, page]);
   useEffect(() => { fetchEmployees(); }, []);
@@ -64,11 +73,51 @@ export default function AdminApplications() {
 
   const handleStatusChange = async (appId, newStatus) => {
     try {
-      await api.updateApplication(appId, { status: newStatus });
+      await api.updateApplicationStatus(appId, { status: newStatus, message: statusRemark || `Status updated to ${newStatus}` });
       toast.success('Status updated');
-      fetchApplications();
+      setStatusRemark('');
+      if (newStatus === 'completed') {
+        setInvoiceStep(true); // stay open, show invoice prompt
+      } else {
+        setShowStatusModal(false);
+        fetchApplications();
+      }
     } catch (error) {
       toast.error('Failed to update status');
+    } finally { setUpdatingStatus(false); }
+  };
+
+  const openStatusModal = (app) => {
+    setStatusModalApp(app);
+    setStatusModalNew(app.status);
+    setStatusRemark('');
+    setInvoiceStep(false);
+    setInvoiceForm({ amount: app.payment?.total || '', dueDate: '', notes: '' });
+    setShowStatusModal(true);
+  };
+
+  const handleCreateInvoice = async () => {
+    if (!statusModalApp) return;
+    setCreatingInvoice(true);
+    try {
+      const amount = parseFloat(invoiceForm.amount) || 0;
+      await api.createInvoice({
+        applicationId: statusModalApp._id,
+        clientId: statusModalApp.client?._id,
+        items: [{ description: statusModalApp.service?.name || 'Service', quantity: 1, rate: amount, amount }],
+        dueDate: invoiceForm.dueDate || null,
+        notes: invoiceForm.notes || null,
+        gstPercent: 18,
+        discount: 0,
+      });
+      toast.success('Invoice created successfully!');
+    } catch (e) {
+      toast.error('Failed to create invoice');
+    } finally {
+      setCreatingInvoice(false);
+      setInvoiceStep(false);
+      setShowStatusModal(false);
+      fetchApplications();
     }
   };
 
@@ -149,15 +198,12 @@ export default function AdminApplications() {
                       </td>
                       <td className="text-sm">{app.service?.name || '-'}</td>
                       <td>
-                        <select
-                          value={app.status}
-                          onChange={(e) => handleStatusChange(app._id, e.target.value)}
-                          className="text-xs px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                        <button
+                          onClick={() => openStatusModal(app)}
+                          className="text-xs px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50"
                         >
-                          {STATUS_OPTIONS.filter(s => s !== 'all').map(s => (
-                            <option key={s} value={s}>{s.replace('-', ' ')}</option>
-                          ))}
-                        </select>
+                          {app.status?.replace(/-/g, ' ')} ✏️
+                        </button>
                       </td>
                       <td>
                         {app.assignedEmployee ? (
@@ -205,21 +251,107 @@ export default function AdminApplications() {
             <p className="text-sm text-slate-600 dark:text-slate-300">
               Assign an employee to application <strong>{selectedApp?.applicationId}</strong>
             </p>
-            <select
+            <SearchableSelect
               value={selectedEmployee}
-              onChange={(e) => setSelectedEmployee(e.target.value)}
-              className="input"
-            >
-              <option value="">Select Employee</option>
-              {employees.map(emp => (
-                <option key={emp._id} value={emp._id}>{emp.name} - {emp.designation || emp.department || 'Employee'}</option>
-              ))}
-            </select>
+              onChange={v => setSelectedEmployee(v)}
+              options={employees.map(emp => ({ value: emp._id, label: emp.name + ' — ' + (emp.designation || emp.department || 'Employee') }))}
+              placeholder="Select Employee…"
+            />
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowAssignModal(false)} className="btn-outline">Cancel</button>
               <button onClick={handleAssign} disabled={!selectedEmployee} className="btn-primary">Assign</button>
             </div>
           </div>
+        </Modal>
+
+        {/* Status Change Modal */}
+        <Modal isOpen={showStatusModal} onClose={() => { setShowStatusModal(false); setInvoiceStep(false); fetchApplications(); }} title={invoiceStep ? 'Create Invoice' : 'Update Status'}>
+          {!invoiceStep ? (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">Application: <strong className="text-slate-800 dark:text-white">{statusModalApp?.applicationId}</strong> — {statusModalApp?.client?.name}</p>
+              <div>
+                <label className="label">New Status</label>
+                <select
+                  value={statusModalNew}
+                  onChange={e => setStatusModalNew(e.target.value)}
+                  className="input capitalize"
+                >
+                  {STATUS_OPTIONS.filter(s => s !== 'all').map(s => (
+                    <option key={s} value={s}>{s.replace(/-/g, ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Remarks / Notes <span className="text-slate-400 font-normal">(optional, sent to client)</span></label>
+                <textarea
+                  value={statusRemark}
+                  onChange={e => setStatusRemark(e.target.value)}
+                  placeholder="Add a remark for the client about this status change..."
+                  className="input h-24 resize-none"
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setShowStatusModal(false)} className="btn-outline">Cancel</button>
+                <button
+                  onClick={() => { setUpdatingStatus(true); handleStatusChange(statusModalApp._id, statusModalNew); }}
+                  disabled={updatingStatus}
+                  className="btn-primary"
+                >
+                  {updatingStatus ? 'Updating...' : 'Update Status'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <span className="text-green-600 text-xl">✅</span>
+                <div>
+                  <p className="font-medium text-green-800 dark:text-green-300 text-sm">Application marked as completed!</p>
+                  <p className="text-green-700 dark:text-green-400 text-xs">Would you like to create an invoice for <strong>{statusModalApp?.client?.name}</strong>?</p>
+                </div>
+              </div>
+              <div>
+                <label className="label">Amount (₹) *</label>
+                <input
+                  type="number"
+                  value={invoiceForm.amount}
+                  onChange={e => setInvoiceForm({ ...invoiceForm, amount: e.target.value })}
+                  className="input"
+                  placeholder="Enter invoice amount"
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="label">Due Date</label>
+                <input
+                  type="date"
+                  value={invoiceForm.dueDate}
+                  onChange={e => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="label">Notes</label>
+                <input
+                  type="text"
+                  value={invoiceForm.notes}
+                  onChange={e => setInvoiceForm({ ...invoiceForm, notes: e.target.value })}
+                  className="input"
+                  placeholder="Optional notes on the invoice"
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => { setInvoiceStep(false); setShowStatusModal(false); fetchApplications(); }} className="btn-outline">Skip</button>
+                <button
+                  onClick={handleCreateInvoice}
+                  disabled={creatingInvoice || !invoiceForm.amount}
+                  className="btn-primary"
+                >
+                  {creatingInvoice ? 'Creating...' : 'Create Invoice'}
+                </button>
+              </div>
+            </div>
+          )}
         </Modal>
       </div>
     </DashboardLayout>

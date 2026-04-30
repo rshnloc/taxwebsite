@@ -10,6 +10,7 @@ function formatUser($u) {
         'name' => $u['name'],
         'email' => $u['email'],
         'phone' => $u['phone'] ?? '',
+        'altPhone' => $u['alt_phone'] ?? '',
         'role' => $u['role'],
         'avatar' => $u['avatar'] ?? '',
         'address' => [
@@ -23,6 +24,8 @@ function formatUser($u) {
         'companyName' => $u['company_name'] ?? '',
         'department' => $u['department'] ?? '',
         'designation' => $u['designation'] ?? '',
+        'roleId' => isset($u['dynamic_role_id']) ? (int)$u['dynamic_role_id'] : null,
+        'roleName' => $u['role_name'] ?? null,
         'isActive' => (bool)$u['is_active'],
         'isVerified' => (bool)$u['is_verified'],
         'lastLogin' => $u['last_login'] ?? null,
@@ -49,6 +52,7 @@ function formatService($s, $db = null) {
         'shortDescription' => $s['short_description'],
         'description' => $s['description'],
         'icon' => $s['icon'],
+        'iconUrl' => $s['icon_url'] ?? null,
         'category' => $s['category'],
         'pricing' => $pricing,
         'timeline' => $s['timeline'],
@@ -61,13 +65,15 @@ function formatService($s, $db = null) {
 
     if ($db) {
         // Load related data
-        $stmt = $db->prepare("SELECT name, description, is_mandatory FROM service_documents WHERE service_id = ?");
+        $stmt = $db->prepare("SELECT name, description, is_mandatory, password_enabled, sort_order FROM service_documents WHERE service_id = ? ORDER BY sort_order, id");
         $stmt->execute([$sid]);
         $result['requiredDocuments'] = array_map(fn($d) => [
             'name' => $d['name'],
             'description' => $d['description'] ?? '',
             'isMandatory' => (bool)$d['is_mandatory'],
             'type' => (bool)$d['is_mandatory'] ? 'required' : 'optional',
+            'passwordEnabled' => (bool)$d['password_enabled'],
+            'sortOrder' => (int)$d['sort_order'],
         ], $stmt->fetchAll());
 
         $stmt = $db->prepare("SELECT feature FROM service_features WHERE service_id = ?");

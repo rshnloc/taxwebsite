@@ -17,8 +17,9 @@ export default function ClientChatPage() {
   const fetchChatRooms = async () => {
     try {
       const data = await api.getChatRooms();
-      setChatRooms(data.chatRooms || []);
-      if (data.chatRooms?.length > 0) setSelectedRoom(data.chatRooms[0]);
+      const rooms = data.rooms || [];
+      setChatRooms(rooms);
+      if (rooms.length > 0) setSelectedRoom(rooms[0]);
     } catch (error) {
       console.error(error);
     } finally {

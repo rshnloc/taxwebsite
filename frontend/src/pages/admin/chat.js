@@ -17,7 +17,7 @@ export default function AdminChatPage() {
   const fetchChatRooms = async () => {
     try {
       const data = await api.getChatRooms();
-      setChatRooms(data.chatRooms || []);
+      setChatRooms(data.rooms || []);
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
 

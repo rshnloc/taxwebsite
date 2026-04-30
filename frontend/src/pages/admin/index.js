@@ -33,11 +33,12 @@ export default function AdminDashboard() {
     pendingApplications = 0,
     completedApplications = 0,
     totalRevenue = 0,
-    monthlyStats = [],
-    statusDistribution = [],
-    servicePopularity = [],
-    recentApplications = []
-  } = stats || {};
+  } = stats?.stats || {};
+
+  const monthlyStats = stats?.monthlyStats || [];
+  const statusDistribution = stats?.statusDistribution || [];
+  const servicePopularity = stats?.serviceStats || [];
+  const recentApplications = stats?.recentApplications || [];
 
   return (
     <DashboardLayout>

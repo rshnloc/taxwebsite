@@ -8,15 +8,21 @@ import toast from 'react-hot-toast';
 
 export default function AdminEmployees() {
   const [employees, setEmployees] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', department: '', designation: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', department: '', designation: '', roleId: '' });
+  
+  useEffect(() => { fetchEmployees(); fetchRoles(); }, []);
 
-  useEffect(() => { fetchEmployees(); }, []);
-
-  const fetchEmployees = async () => {
+  const fetchRoles = async () => {
+    try {
+      const data = await api.getRoles();
+      setRoles(data.roles || []);
+    } catch (e) { console.error(e); }
+  };  const fetchEmployees = async () => {
     try {
       const data = await api.getUsers({ role: 'employee' });
       setEmployees(data.users || []);
@@ -29,13 +35,13 @@ export default function AdminEmployees() {
 
   const openAdd = () => {
     setEditingEmployee(null);
-    setForm({ name: '', email: '', phone: '', password: '', department: '', designation: '' });
+    setForm({ name: '', email: '', phone: '', password: '', department: '', designation: '', roleId: '' });
     setShowModal(true);
   };
 
   const openEdit = (emp) => {
     setEditingEmployee(emp);
-    setForm({ name: emp.name, email: emp.email, phone: emp.phone || '', password: '', department: emp.department || '', designation: emp.designation || '' });
+    setForm({ name: emp.name, email: emp.email, phone: emp.phone || '', password: '', department: emp.department || '', designation: emp.designation || '', roleId: emp.roleId || '' });
     setShowModal(true);
   };
 
@@ -45,10 +51,13 @@ export default function AdminEmployees() {
       if (editingEmployee) {
         const updateData = { ...form };
         if (!updateData.password) delete updateData.password;
+        if (updateData.roleId) updateData.roleId = parseInt(updateData.roleId);
         await api.updateUser(editingEmployee._id, updateData);
         toast.success('Employee updated');
       } else {
-        await api.createUser({ ...form, role: 'employee' });
+        const payload = { ...form, role: 'employee' };
+        if (payload.roleId) payload.roleId = parseInt(payload.roleId);
+        await api.createUser(payload);
         toast.success('Employee created');
       }
       setShowModal(false);
@@ -103,6 +112,9 @@ export default function AdminEmployees() {
                     <div>
                       <h3 className="font-semibold text-slate-900 dark:text-white">{emp.name}</h3>
                       <p className="text-xs text-slate-500">{emp.designation || emp.department || 'Employee'}</p>
+                      {emp.roleName && (
+                        <span className="inline-block mt-1 text-xs bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 px-2 py-0.5 rounded-full">{emp.roleName}</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -155,6 +167,15 @@ export default function AdminEmployees() {
                 <label className="label">Designation</label>
                 <input type="text" value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} className="input" placeholder="e.g., CA" />
               </div>
+            </div>
+            <div>
+              <label className="label">Role (Permissions)</label>
+              <select value={form.roleId} onChange={e => setForm({ ...form, roleId: e.target.value })} className="input">
+                <option value="">-- No specific role --</option>
+                {roles.map(r => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
             </div>
             <div className="flex gap-3 justify-end pt-2">
               <button type="button" onClick={() => setShowModal(false)} className="btn-outline">Cancel</button>
