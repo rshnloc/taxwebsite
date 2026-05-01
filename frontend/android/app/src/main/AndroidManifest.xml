@@ -9,20 +9,36 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- ── Splash (LAUNCHER) ─────────────────────────────────────── -->
         <activity
+            android:name=".ui.splash.SplashActivity"
+            android:theme="@style/AppTheme.Splash"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
-            android:name=".MainActivity"
-            android:label="@string/title_activity_main"
-            android:theme="@style/AppTheme.NoActionBarLaunch"
-            android:launchMode="singleTask"
-            android:exported="true">
-
+            android:launchMode="singleTop"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
         </activity>
+
+        <!-- ── Onboarding ────────────────────────────────────────────── -->
+        <activity
+            android:name=".ui.onboarding.OnboardingActivity"
+            android:theme="@style/AppTheme.Fullscreen"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:launchMode="singleTop"
+            android:exported="false" />
+
+        <!-- ── Main Capacitor WebView ────────────────────────────────── -->
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:launchMode="singleTask"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -31,11 +47,9 @@
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths"></meta-data>
+                android:resource="@xml/file_paths" />
         </provider>
     </application>
-
-    <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
 </manifest>
