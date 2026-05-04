@@ -315,6 +315,375 @@ class Mailer {
         self::send($toEmail, $toName, $subject, $html, $text);
     }
 
+    public static function sendPasswordResetEmail($toEmail, $toName, $otp) {
+        $subject = 'Password Reset OTP — Tax CareerXera';
+        $html = '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px">
+<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+  <h2 style="color:#1a56db;margin-bottom:8px">Password Reset</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName ?? $toEmail) . '</strong>,</p>
+  <p style="color:#374151">We received a request to reset your password. Use the OTP below to proceed:</p>
+  <div style="background:#eff6ff;border:2px dashed #1a56db;border-radius:10px;padding:20px;text-align:center;margin:20px 0">
+    <span style="font-size:36px;font-weight:bold;letter-spacing:10px;color:#1a56db">' . htmlspecialchars($otp) . '</span>
+  </div>
+  <p style="color:#6b7280;font-size:13px">This OTP is valid for <strong>10 minutes</strong>. Do not share it with anyone.</p>
+  <p style="color:#6b7280;font-size:13px">If you did not request a password reset, please ignore this email. Your password will not change.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "Password Reset OTP: $otp\nValid for 10 minutes. Do not share with anyone.\n\ntax.careerxera.com";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendBirthdayEmail($toEmail, $toName) {
+        $subject = '🎂 Happy Birthday from Tax CareerXera!';
+        $html = '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px">
+<div style="max-width:520px;margin:0 auto;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:12px;padding:4px">
+<div style="background:#fff;border-radius:10px;padding:32px;text-align:center">
+  <div style="font-size:60px;margin-bottom:16px">🎂🎉🎈</div>
+  <h1 style="color:#1a56db;font-size:28px;margin-bottom:8px">Happy Birthday!</h1>
+  <p style="color:#374151;font-size:16px;margin-bottom:20px">Dear <strong>' . htmlspecialchars($toName ?? $toEmail) . '</strong>,</p>
+  <div style="background:linear-gradient(135deg,#667eea22,#764ba222);border-radius:10px;padding:20px;margin:20px 0">
+    <p style="color:#4c1d95;font-size:15px;line-height:1.6;margin:0">Wishing you a wonderful birthday filled with joy, happiness, and success! 🌟<br><br>
+    Thank you for your amazing dedication and hard work. You make our team shine every day. Have a fantastic day!</p>
+  </div>
+  <p style="color:#6b7280;font-size:13px">From the entire Tax CareerXera family 💙</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div>
+</div></body></html>';
+        $text = "Happy Birthday, $toName! 🎂\n\nWishing you a wonderful birthday filled with joy and happiness!\n\nFrom the Tax CareerXera family.\ntax.careerxera.com";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendBirthdayAdminEmail($toEmail, $toName, $employeeName, $employeeEmail) {
+        $subject = "🎂 Birthday Today: $employeeName";
+        $html = '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px">
+<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+  <h2 style="color:#1a56db;margin-bottom:4px">🎂 Employee Birthday Today</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName ?? 'Admin') . '</strong>,</p>
+  <p style="color:#374151">Today is a special day for one of your team members!</p>
+  <div style="background:#fdf4ff;border:1px solid #e9d5ff;border-radius:10px;padding:20px;margin:16px 0;text-align:center">
+    <div style="font-size:40px;margin-bottom:8px">🎉</div>
+    <p style="font-size:20px;font-weight:bold;color:#7c3aed;margin:0">' . htmlspecialchars($employeeName) . '</p>
+    <p style="color:#6b7280;font-size:13px;margin:4px 0">' . htmlspecialchars($employeeEmail) . '</p>
+    <p style="color:#7c3aed;font-size:13px;margin:8px 0">is celebrating their birthday today! 🎂</p>
+  </div>
+  <p style="color:#374151;font-size:14px">Consider sending them a personal birthday wish to brighten their day!</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "Employee Birthday: $employeeName ($employeeEmail) is celebrating their birthday today!\n\ntax.careerxera.com";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    // ===== PARTNER EMAILS =====
+
+    public static function sendPartnerWelcomeEmail($toEmail, $toName) {
+        $subject = 'Welcome to Tax CareerXera Associates Partner Program!';
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <div style="text-align:center;margin-bottom:24px"><div style="width:56px;height:56px;background:linear-gradient(135deg,#7c3aed,#4f46e5);border-radius:12px;display:inline-flex;align-items:center;justify-content:center"><span style="color:white;font-weight:bold;font-size:22px">H</span></div></div>
+  <h2 style="color:#1e293b;margin:0 0 16px">Welcome to Associates Partners! 🤝</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151">Thank you for registering as an Associates Partner with <strong>Tax CareerXera</strong>. Your application is currently <strong>under review</strong>.</p>
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:20px;margin:16px 0">
+    <p style="color:#1d4ed8;font-weight:bold;margin:0 0 8px">What happens next?</p>
+    <ol style="color:#374151;margin:0;padding-left:20px;line-height:1.8">
+      <li>Our team will review your application</li>
+      <li>You may be contacted for additional information</li>
+      <li>Once approved, you will receive your rate card</li>
+      <li>After accepting the rate card, you can start referring clients!</li>
+    </ol>
+  </div>
+  <p style="color:#374151;font-size:14px">You can log in at any time to check your application status.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "Welcome to Tax CareerXera Associates Partners, $toName! Your application is under review.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendPartnerAssignedEmail($toEmail, $toName, $partnerName) {
+        $subject = 'New Partner Assigned for Review — ' . $partnerName;
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <h2 style="color:#1e293b">New Partner Review Assigned 📋</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151">A new Associates Partner application has been assigned to you for review:</p>
+  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin:16px 0">
+    <p style="font-size:18px;font-weight:bold;color:#15803d;margin:0">' . htmlspecialchars($partnerName) . '</p>
+    <p style="color:#6b7280;font-size:13px;margin:4px 0">Please review their profile and provide your assessment.</p>
+  </div>
+  <p style="color:#374151;font-size:14px">Log in to your dashboard and navigate to the Partner Review Queue to get started.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "New partner assigned for review: $partnerName. Please log in to review.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendPartnerApprovedEmail($toEmail, $toName) {
+        $subject = '🎉 Congratulations! Your Partner Application is Approved';
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <div style="text-align:center;margin-bottom:24px;font-size:48px">🎉</div>
+  <h2 style="color:#1e293b;text-align:center">Application Approved!</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151">We are thrilled to inform you that your Associates Partner application has been <strong style="color:#16a34a">APPROVED</strong>! Welcome to the Tax CareerXera Partners family.</p>
+  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin:16px 0;text-align:center">
+    <p style="color:#16a34a;font-weight:bold;font-size:16px;margin:0">Your rate cards are being prepared. You will receive another email once your rate card is ready for your review.</p>
+  </div>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "Congratulations $toName! Your Associates Partner application has been approved.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendPartnerRejectedEmail($toEmail, $toName, $reason) {
+        $subject = 'Update on Your Associates Partner Application';
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <h2 style="color:#1e293b">Application Status Update</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151">After careful review, we are unable to approve your Associates Partner application at this time.</p>
+  ' . ($reason ? '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px;margin:16px 0"><p style="color:#dc2626;font-weight:bold;margin:0 0 4px">Reason:</p><p style="color:#374151;margin:0">' . htmlspecialchars($reason) . '</p></div>' : '') . '
+  <p style="color:#374151;font-size:14px">If you believe this is an error or would like to reapply, please contact our support team.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "Your Associates Partner application status update: $toName. Please log in for details.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendPartnerNeedsUpdateEmail($toEmail, $toName, $comments) {
+        $subject = 'Action Required: Update Your Partner Application';
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <h2 style="color:#1e293b">⚠️ Application Update Required</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151">Our team has reviewed your application and needs some additional information or updates before we can proceed.</p>
+  ' . ($comments ? '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px;margin:16px 0"><p style="color:#92400e;font-weight:bold;margin:0 0 4px">What\'s needed:</p><p style="color:#374151;margin:0">' . htmlspecialchars($comments) . '</p></div>' : '') . '
+  <p style="color:#374151;font-size:14px">Please log in to your partner dashboard and update your profile accordingly.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "Action required for your partner application, $toName. Please log in and update your profile.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendPartnerReviewedAdminEmail($toEmail, $toName, $partnerName, $reviewerName) {
+        $subject = 'Partner Reviewed — Ready for Admin Approval: ' . $partnerName;
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <h2 style="color:#1e293b">Partner Ready for Admin Approval 🔔</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151"><strong>' . htmlspecialchars($reviewerName) . '</strong> has reviewed the partner application for <strong>' . htmlspecialchars($partnerName) . '</strong> and it is now awaiting your final approval.</p>
+  <p style="color:#374151;font-size:14px">Log in to the admin panel to approve or reject this application.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "Partner $partnerName has been reviewed by $reviewerName and is awaiting admin approval.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendRateCardCreatedEmail($toEmail, $toName, $serviceName, $partnerPrice) {
+        $subject = 'New Rate Card Available for Your Review — ' . $serviceName;
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <h2 style="color:#1e293b">New Rate Card for Review 📄</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151">A new rate card has been created for you:</p>
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:20px;margin:16px 0">
+    <p style="font-size:16px;font-weight:bold;color:#1d4ed8;margin:0 0 8px">' . htmlspecialchars($serviceName) . '</p>
+    <p style="color:#374151;margin:0">Your Partner Price: <strong>₹' . number_format($partnerPrice, 2) . '</strong></p>
+  </div>
+  <p style="color:#374151;font-size:14px">Please log in to your partner dashboard to review and accept or reject this rate card.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "A new rate card has been created for $serviceName at ₹$partnerPrice. Please log in to review.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendRateCardApprovedEmail($toEmail, $toName, $serviceName) {
+        $subject = '✅ Rate Card Approved — ' . $serviceName;
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <h2 style="color:#1e293b">Rate Card Approved ✅</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151">Your rate card for <strong>' . htmlspecialchars($serviceName) . '</strong> has been <strong style="color:#16a34a">APPROVED</strong>. You can now start referring clients for this service!</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "Your rate card for $serviceName has been approved! You can now refer clients.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendRateCardRejectedEmail($toEmail, $toName, $serviceName, $reason) {
+        $subject = 'Rate Card Update — ' . $serviceName;
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <h2 style="color:#1e293b">Rate Card Not Approved</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151">The rate card for <strong>' . htmlspecialchars($serviceName) . '</strong> has been rejected.</p>
+  ' . ($reason ? '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px;margin:16px 0"><p style="color:#dc2626;font-weight:bold;margin:0 0 4px">Reason:</p><p style="color:#374151;margin:0">' . htmlspecialchars($reason) . '</p></div>' : '') . '
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "The rate card for $serviceName has been rejected.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendRateCardPartnerRespondedEmail($toEmail, $toName, $partnerName, $serviceName, $action) {
+        $subject = "Partner $action rate card — $serviceName";
+        $actionText = $action === 'accept' ? 'ACCEPTED ✅' : 'REJECTED ❌';
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+<div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <h2 style="color:#1e293b">Partner Rate Card Response</h2>
+  <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+  <p style="color:#374151"><strong>' . htmlspecialchars($partnerName) . '</strong> has <strong>' . $actionText . '</strong> the rate card for <strong>' . htmlspecialchars($serviceName) . '</strong>.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+  <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+</div></body></html>';
+        $text = "$partnerName has $action the rate card for $serviceName.";
+        self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
+    public static function sendPartnerServiceRequestConfirmation($toEmail, $toName, $serviceName, $ref) {
+        $subject = "Service Request Received — $ref";
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+  <div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+    <h2 style="color:#1e293b">Service Request Submitted ✅</h2>
+    <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+    <p style="color:#374151">Your service request for <strong>' . htmlspecialchars($serviceName) . '</strong> has been received.</p>
+    <p style="color:#374151">Reference: <strong>' . htmlspecialchars($ref) . '</strong></p>
+    <p style="color:#374151">Our team will review it shortly and update you.</p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+    <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+  </div></body></html>';
+        self::send($toEmail, $toName, $subject, $html, "Service request $ref received for $serviceName.");
+    }
+
+    public static function sendPartnerServiceRequestAdminNotify($toEmail, $toName, $partnerName, $serviceName, $ref) {
+        $subject = "New Partner Service Request — $ref";
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+  <div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+    <h2 style="color:#1e293b">New Partner Service Request</h2>
+    <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+    <p style="color:#374151">Partner <strong>' . htmlspecialchars($partnerName) . '</strong> submitted a service request for <strong>' . htmlspecialchars($serviceName) . '</strong>.</p>
+    <p style="color:#374151">Reference: <strong>' . htmlspecialchars($ref) . '</strong></p>
+    <p style="margin-top:16px"><a href="https://tax.careerxera.com/admin/partner-requests" style="background:#3b82f6;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Review Request</a></p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+    <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+  </div></body></html>';
+        self::send($toEmail, $toName, $subject, $html, "New service request $ref from $partnerName.");
+    }
+
+    public static function sendPartnerRequestStatusUpdate($toEmail, $toName, $ref, $status, $comments = '') {
+        $labels = ['under-review'=>'Under Review','in-progress'=>'In Progress','completed'=>'Completed','rejected'=>'Rejected','cancelled'=>'Cancelled'];
+        $label  = $labels[$status] ?? ucfirst($status);
+        $subject = "Service Request $ref — $label";
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+  <div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+    <h2 style="color:#1e293b">Service Request Update</h2>
+    <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+    <p style="color:#374151">Your service request <strong>' . htmlspecialchars($ref) . '</strong> has been updated to <strong>' . htmlspecialchars($label) . '</strong>.</p>'
+    . ($comments ? '<p style="color:#374151">Note: ' . htmlspecialchars($comments) . '</p>' : '') .
+    '<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+    <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+  </div></body></html>';
+        self::send($toEmail, $toName, $subject, $html, "Request $ref is now $label.");
+    }
+
+    public static function sendPartnerCredentialsEmail($toEmail, $toName, $loginEmail, $plainPassword) {
+        $subject = 'Your Associate Partner Account – Tax CareerXera';
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+  <div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+    <h2 style="color:#1e3a5f;margin-top:0">Welcome to Tax CareerXera!</h2>
+    <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+    <p style="color:#374151">Your Associate Partner account has been created. You can log in immediately using the credentials below:</p>
+    <div style="background:#f3f4f6;border-radius:8px;padding:16px;margin:20px 0">
+      <p style="margin:0 0 8px;color:#374151"><strong>Login URL:</strong> <a href="https://tax.careerxera.com/login" style="color:#3b82f6">tax.careerxera.com/login</a></p>
+      <p style="margin:0 0 8px;color:#374151"><strong>Email:</strong> ' . htmlspecialchars($loginEmail) . '</p>
+      <p style="margin:0;color:#374151"><strong>Password:</strong> <span style="font-family:monospace;background:#e5e7eb;padding:2px 8px;border-radius:4px">' . htmlspecialchars($plainPassword) . '</span></p>
+    </div>
+    <p style="color:#374151">Please log in and change your password from your profile settings.</p>
+    <p style="margin-top:20px"><a href="https://tax.careerxera.com/login" style="background:#1e3a5f;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block">Log In Now</a></p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+    <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+  </div></body></html>';
+        self::send($toEmail, $toName, $subject, $html, "Your login: $loginEmail / Password: $plainPassword — tax.careerxera.com/login");
+    }
+
+    public static function sendRateCardBulkAssignedEmail($toEmail, $toName, $count) {
+        $subject = 'Rate Card(s) Assigned – Tax CareerXera';
+        $html = '<html><body style="font-family:Arial,sans-serif;background:#f9fafb;margin:0;padding:20px">
+  <div style="max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+    <h2 style="color:#1e3a5f;margin-top:0">Rate Card Assignment</h2>
+    <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+    <p style="color:#374151"><strong>' . (int)$count . ' rate card(s)</strong> have been assigned to your account. Please log in to review and accept or reject them.</p>
+    <p style="margin-top:20px"><a href="https://tax.careerxera.com/partner/rate-cards" style="background:#1e3a5f;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block">View Rate Cards</a></p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+    <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+  </div></body></html>';
+        self::send($toEmail, $toName, $subject, $html, "$count rate card(s) have been assigned to your partner account.");
+    }
+
+    public static function sendPartnerInvoiceEmail($toEmail, $toName, $invNumber, $total, $dueDate, $periodStart, $periodEnd, $items) {
+        $subject = "Invoice $invNumber – Tax CareerXera";
+        $itemRows = '';
+        foreach ($items as $item) {
+            $itemRows .= '<tr>
+              <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6">' . htmlspecialchars($item['description'] ?? '') . '</td>
+              <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;text-align:right">' . number_format((float)($item['amount'] ?? 0), 2) . '</td>
+            </tr>';
+        }
+        $html = '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f9fafb;font-family:Arial,sans-serif">
+  <div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+    <h2 style="color:#1e3a5f;margin-top:0">Invoice ' . htmlspecialchars($invNumber) . '</h2>
+    <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+    <p style="color:#374151">Please find your invoice for the period <strong>' . htmlspecialchars($periodStart) . '</strong> to <strong>' . htmlspecialchars($periodEnd) . '</strong>.</p>
+    <table style="width:100%;border-collapse:collapse;margin:20px 0">
+      <thead><tr style="background:#f3f4f6">
+        <th style="padding:10px 12px;text-align:left;color:#374151">Description</th>
+        <th style="padding:10px 12px;text-align:right;color:#374151">Amount (₹)</th>
+      </tr></thead>
+      <tbody>' . $itemRows . '</tbody>
+      <tfoot><tr style="background:#1e3a5f">
+        <td style="padding:10px 12px;color:#fff;font-weight:bold">Total</td>
+        <td style="padding:10px 12px;color:#fff;font-weight:bold;text-align:right">₹' . number_format((float)$total, 2) . '</td>
+      </tr></tfoot>
+    </table>
+    <p style="color:#374151"><strong>Due Date:</strong> ' . htmlspecialchars($dueDate) . '</p>
+    <p style="color:#374151">Please log in to your partner portal to view and download the full invoice PDF.</p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+    <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+  </div></body></html>';
+        self::send($toEmail, $toName, $subject, $html, "Invoice $invNumber for ₹" . number_format((float)$total, 2) . " is due on $dueDate.");
+    }
+
+    public static function sendPartnerPaymentConfirmed($toEmail, $toName, $invNumber, $amount, $totalPaid, $invoiceTotal) {
+        $balance = (float)$invoiceTotal - (float)$totalPaid;
+        $fullyPaid = $balance <= 0;
+        $subject = $fullyPaid ? "Payment Received – Invoice $invNumber Cleared" : "Payment of ₹" . number_format((float)$amount, 2) . " Recorded – Invoice $invNumber";
+        $html = '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f9fafb;font-family:Arial,sans-serif">
+  <div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;padding:40px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+    <h2 style="color:#1e3a5f;margin-top:0">Payment Confirmation</h2>
+    <p style="color:#374151">Hi <strong>' . htmlspecialchars($toName) . '</strong>,</p>
+    <p style="color:#374151">We have recorded a payment of <strong>₹' . number_format((float)$amount, 2) . '</strong> against invoice <strong>' . htmlspecialchars($invNumber) . '</strong>.</p>
+    <table style="width:100%;border-collapse:collapse;margin:20px 0">
+      <tr><td style="padding:8px 12px;color:#374151">Invoice Total</td><td style="padding:8px 12px;text-align:right;color:#374151">₹' . number_format((float)$invoiceTotal, 2) . '</td></tr>
+      <tr><td style="padding:8px 12px;color:#374151">Total Paid</td><td style="padding:8px 12px;text-align:right;color:#374151">₹' . number_format((float)$totalPaid, 2) . '</td></tr>
+      <tr style="background:' . ($fullyPaid ? '#dcfce7' : '#fef9c3') . '"><td style="padding:8px 12px;font-weight:bold">Balance Due</td><td style="padding:8px 12px;text-align:right;font-weight:bold">₹' . number_format(max(0, $balance), 2) . '</td></tr>
+    </table>
+    ' . ($fullyPaid ? '<p style="color:#16a34a;font-weight:bold">✓ Invoice fully cleared. Thank you!</p>' : '<p style="color:#374151">Please arrange the remaining balance at your earliest convenience.</p>') . '
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+    <p style="color:#9ca3af;font-size:12px">Tax CareerXera | tax.careerxera.com</p>
+  </div></body></html>';
+        self::send($toEmail, $toName, $subject, $html, "Payment of ₹" . number_format((float)$amount, 2) . " recorded for invoice $invNumber.");
+    }
+
     private static function render($template, $payload) {
         return preg_replace_callback('/{{\s*([a-zA-Z0-9_\.]+)\s*}}/', function ($matches) use ($payload) {
             $value = $payload;

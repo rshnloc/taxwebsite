@@ -59,10 +59,19 @@ class ApiClient {
   async register(data) { return this.request('/auth/register', { method: 'POST', body: data }); }
   async verifyOTP(email, otp) { return this.request('/auth/verify-otp', { method: 'POST', body: { email, otp } }); }
   async resendOTP(email) { return this.request('/auth/resend-otp', { method: 'POST', body: { email } }); }
+  async forgotPassword(email) { return this.request('/auth/forgot-password', { method: 'POST', body: { email } }); }
+  async resetPassword(email, otp, newPassword) { return this.request('/auth/verify-otp', { method: 'POST', body: { email, otp, newPassword } }); }
   async getMe() { return this.request('/auth/me'); }
   async updateProfile(data) { return this.request('/auth/profile', { method: 'PUT', body: data }); }
   async changePassword(data) { return this.request('/auth/change-password', { method: 'PUT', body: data }); }
   async uploadAvatar(fd) { return this.request('/auth/avatar', { method: 'POST', body: fd }); }
+
+  // Employee profile
+  async getMyProfile() { return this.request('/employee/profile'); }
+
+  // Admin birthday
+  async getBirthdaysToday() { return this.request('/admin/birthday-today'); }
+  async runBirthdayCheck() { return this.request('/admin/birthday-check', { method: 'POST' }); }
 
   // Users
   async getUsers(params = {}) {
@@ -98,21 +107,33 @@ class ApiClient {
   async updateApplicationStatus(id, data) { return this.request(`/applications/${id}/status`, { method: 'PUT', body: data }); }
   async addApplicationRemark(id, data) { return this.request(`/applications/${id}/remarks`, { method: 'POST', body: data }); }
   async assignEmployee(id, employeeId) { return this.request(`/applications/${id}/assign`, { method: 'PUT', body: { employeeId } }); }
+  async rateApplication(id, data) { return this.request(`/applications/${id}/rate`, { method: 'POST', body: data }); }
+  async getEmployeeRatings(employeeId) { return this.request(`/employees/${employeeId}/ratings`); }
 
   // Tasks
   async getTasks(params = '') { return this.request(`/tasks?${params}`); }
   async getMyTasks(params = '') { return this.request(`/tasks/my?${params}`); }
   async getTaskById(id) { return this.request(`/tasks/${id}`); }
   async createTask(data) { return this.request('/tasks', { method: 'POST', body: data }); }
+  async adminCreateTaskWithClient(formData) { return this.request('/admin/tasks/create-with-client', { method: 'POST', body: formData, headers: {} }); }
   async updateTask(id, data) { return this.request(`/tasks/${id}`, { method: 'PUT', body: data }); }
   async updateTaskStatus(id, data) { return this.request(`/tasks/${id}/status`, { method: 'PUT', body: data }); }
   async deleteTask(id) { return this.request(`/tasks/${id}`, { method: 'DELETE' }); }
+  async getTaskFinalDocs(id) { return this.request(`/tasks/${id}/final-docs`); }
+  async uploadTaskFinalDocs(id, formData) { return this.request(`/tasks/${id}/final-docs`, { method: 'POST', body: formData, headers: {} }); }
+  async approveTask(id, data) { return this.request(`/tasks/${id}/approve`, { method: 'POST', body: data }); }
+  async rejectTask(id, data) { return this.request(`/tasks/${id}/reject`, { method: 'POST', body: data }); }
 
   // Chat
   async getChatRooms() { return this.request('/chat/rooms'); }
   async getChatMessages(roomId) { return this.request(`/chat/rooms/${roomId}/messages`); }
   async sendMessage(roomId, data) { return this.request(`/chat/rooms/${roomId}/messages`, { method: 'POST', body: data }); }
   async createChatRoom(data) { return this.request('/chat/rooms', { method: 'POST', body: data }); }
+  async flagChatRoom(roomId, flag, reason = '') { return this.request(`/chat/rooms/${roomId}/flag`, { method: 'POST', body: { flag, reason } }); }
+  async getUsersOnlineStatus(ids = []) {
+    const qs = ids.length ? `?ids=${ids.join(',')}` : '';
+    return this.request(`/users/online-status${qs}`);
+  }
 
   // Invoices
   async getInvoices(params = {}) {
@@ -187,6 +208,139 @@ class ApiClient {
   async getDocuments(applicationId) { return this.request(`/applications/${applicationId}/documents`); }
   async getDocumentPassword(docId) { return this.request(`/documents/${docId}/password`); }
   async updateDocumentStatus(docId, status) { return this.request(`/documents/${docId}/status`, { method: 'PUT', body: { status } }); }
+
+  // Associates Partners
+  async registerPartner(data) { return this.request('/partners/register', { method: 'POST', body: data }); }
+  async adminCreatePartner(data) { return this.request('/admin/partners/create', { method: 'POST', body: data }); }
+  async adminBulkAssignRateCards(partnerId, rateCards) { return this.request(`/admin/partners/${partnerId}/bulk-rate-cards`, { method: 'POST', body: { rateCards } }); }
+  async getMyPartnerProfile() { return this.request('/partners/me'); }
+  async updateMyPartnerProfile(data) { return this.request('/partners/me', { method: 'PUT', body: data }); }
+  async getPartners(params = {}) { return this.request(`/partners?${new URLSearchParams(params)}`); }
+  async getPartnerById(id) { return this.request(`/partners/${id}`); }
+  async updatePartnerStatus(id, data) { return this.request(`/partners/${id}/status`, { method: 'PUT', body: data }); }
+  async getPartnerReviewQueue() { return this.request('/partners/review-queue'); }
+
+  // Rate Cards
+  async getRateCards(params = {}) { return this.request(`/rate-cards?${new URLSearchParams(params)}`); }
+  async getRateCardById(id) { return this.request(`/rate-cards/${id}`); }
+  async createRateCard(data) { return this.request('/rate-cards', { method: 'POST', body: data }); }
+  async updateRateCard(id, data) { return this.request(`/rate-cards/${id}`, { method: 'PUT', body: data }); }
+  async deleteRateCard(id) { return this.request(`/rate-cards/${id}`, { method: 'DELETE' }); }
+  async adminUpdateRateCardStatus(id, data) { return this.request(`/rate-cards/${id}/admin-status`, { method: 'PUT', body: data }); }
+  async partnerRespondRateCard(id, data) { return this.request(`/rate-cards/${id}/respond`, { method: 'PUT', body: data }); }
+
+  // Partner Service Requests
+  async createPartnerServiceRequest(formData) { return this.request('/partner/service-requests', { method: 'POST', body: formData, headers: {} }); }
+  async getMyPartnerServiceRequests() { return this.request('/partner/service-requests'); }
+  async getPartnerServiceRequestById(id) { return this.request(`/partner/service-requests/${id}`); }
+  async getAllPartnerRequests(params = {}) { return this.request(`/admin/partner-requests?${new URLSearchParams(params)}`); }
+  async updatePartnerRequestStatus(id, data) { return this.request(`/admin/partner-requests/${id}/status`, { method: 'PUT', body: data }); }
+
+  // Performance
+  async getPerformanceStats(params = {}) { return this.request(`/performance?${new URLSearchParams(params)}`); }
+  async getEmployeeOfMonth() { return this.request('/performance/eotm'); }
+  async exportPerformanceCSV(params = {}) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const qs = new URLSearchParams(params).toString();
+    const url = `${this.baseURL}/performance/export/csv${qs ? '?' + qs : ''}`;
+    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new Error('Export failed');
+    const blob = await res.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `performance_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  }
+  async exportPerformancePDF(params = {}) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const qs = new URLSearchParams(params).toString();
+    const url = `${this.baseURL}/performance/export/pdf${qs ? '?' + qs : ''}`;
+    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new Error('Export failed');
+    const blob = await res.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `performance_${new Date().toISOString().slice(0,10)}.pdf`; a.click();
+  }
+  // ===== PAYMENT ACCOUNTS =====
+  async getPaymentAccounts(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/admin/payment-accounts${qs ? '?' + qs : ''}`);
+  }
+  async createPaymentAccount(formData) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const res = await fetch(`${this.baseURL}/admin/payment-accounts`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  }
+  async updatePaymentAccount(id, formData) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const res = await fetch(`${this.baseURL}/admin/payment-accounts/${id}`, {
+      method: 'PUT',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  }
+  async deletePaymentAccount(id) {
+    return this.request(`/admin/payment-accounts/${id}`, { method: 'DELETE' });
+  }
+  async setDefaultPaymentAccount(id) {
+    return this.request(`/admin/payment-accounts/${id}/set-default`, { method: 'POST' });
+  }
+
+  // ===== PARTNER INVOICES =====
+  async getPartnerInvoices(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/partner-invoices${qs ? '?' + qs : ''}`);
+  }
+  async getPartnerInvoiceById(id) {
+    return this.request(`/partner-invoices/${id}`);
+  }
+  async createPartnerInvoice(data) {
+    return this.request('/admin/partner-invoices', { method: 'POST', body: data });
+  }
+  async autoGeneratePartnerInvoices(data = {}) {
+    return this.request('/admin/partner-invoices/auto-generate', { method: 'POST', body: data });
+  }
+  async reviewPartnerInvoice(id, data) {
+    return this.request(`/admin/partner-invoices/${id}/review`, { method: 'PATCH', body: data });
+  }
+  async finalizePartnerInvoice(id, data = {}) {
+    return this.request(`/admin/partner-invoices/${id}/finalize`, { method: 'POST', body: data });
+  }
+  async sendPartnerInvoice(id) {
+    return this.request(`/admin/partner-invoices/${id}/send`, { method: 'POST', body: {} });
+  }
+  async recordPartnerInvoicePayment(id, data) {
+    return this.request(`/admin/partner-invoices/${id}/record-payment`, { method: 'POST', body: data });
+  }
+  async cancelPartnerInvoice(id) {
+    return this.request(`/admin/partner-invoices/${id}/cancel`, { method: 'POST', body: {} });
+  }
+  async exportPartnerInvoicesCSV(params = {}) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const qs = new URLSearchParams(params).toString();
+    const url = `${this.baseURL}/admin/partner-invoices/export/csv${qs ? '?' + qs : ''}`;
+    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new Error('Export failed');
+    const blob = await res.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `partner_invoices_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  }
+  async downloadPartnerInvoicePDF(id) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const url = `${this.baseURL}/partner-invoices/${id}/pdf`;
+    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new Error('PDF failed');
+    const blob = await res.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `invoice_${id}.pdf`; a.click();
+  }
 }
 
 const api = new ApiClient();

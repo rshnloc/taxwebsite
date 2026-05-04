@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) NOT NULL UNIQUE,
   phone VARCHAR(20) DEFAULT NULL,
   password VARCHAR(255) NOT NULL,
-  role ENUM('client','employee','admin') DEFAULT 'client',
+  role ENUM('client','employee','admin','partner') DEFAULT 'client',
   avatar VARCHAR(500) DEFAULT '',
   address_street VARCHAR(255) DEFAULT NULL,
   address_city VARCHAR(100) DEFAULT NULL,
@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS users (
   last_login DATETIME DEFAULT NULL,
   reset_password_token VARCHAR(255) DEFAULT NULL,
   reset_password_expiry DATETIME DEFAULT NULL,
+  partner_status VARCHAR(30) DEFAULT NULL,
+  partner_assigned_reviewer INT DEFAULT NULL,
+  partner_about TEXT DEFAULT NULL,
+  aadhaar VARCHAR(20) DEFAULT NULL,
+  registered_date DATE DEFAULT NULL,
+  last_active_at DATETIME DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FULLTEXT INDEX idx_user_search (name, email, company_name)
@@ -142,6 +148,9 @@ CREATE TABLE IF NOT EXISTS applications (
   payment_paid_at DATETIME DEFAULT NULL,
   due_date DATETIME DEFAULT NULL,
   completed_at DATETIME DEFAULT NULL,
+  rating TINYINT DEFAULT NULL,
+  rating_feedback TEXT DEFAULT NULL,
+  rated_at DATETIME DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (client_id) REFERENCES users(id),
@@ -242,15 +251,20 @@ CREATE TABLE IF NOT EXISTS task_remarks (
 -- Chat rooms
 CREATE TABLE IF NOT EXISTS chat_rooms (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  application_id INT NOT NULL,
+  application_id INT DEFAULT NULL,
+  room_type VARCHAR(30) DEFAULT 'application',
+  title VARCHAR(255) DEFAULT NULL,
   last_message_content TEXT DEFAULT NULL,
   last_message_sender_id INT DEFAULT NULL,
   last_message_timestamp DATETIME DEFAULT NULL,
   is_active TINYINT(1) DEFAULT 1,
+  is_flagged TINYINT(1) DEFAULT 0,
+  flag_reason VARCHAR(255) DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (application_id) REFERENCES applications(id),
-  INDEX idx_chatroom_app (application_id)
+  INDEX idx_chatroom_app (application_id),
+  INDEX idx_chatroom_type (room_type)
 ) ENGINE=InnoDB;
 
 -- Chat room participants

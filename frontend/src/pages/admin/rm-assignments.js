@@ -67,8 +67,9 @@ export default function AdminRMAssignments() {
     const rmName = a.rm?.name || a.rm_name || '';
     const clientEmail = a.client?.email || a.client_email || '';
     if (q && !clientName.toLowerCase().includes(q) && !rmName.toLowerCase().includes(q) && !clientEmail.toLowerCase().includes(q)) return false;
-    if (filterRM && String(a.rm?.id || a.rm_id) !== String(filterRM)) return false;
-    if (filterStatus && a.isActive !== undefined ? (filterStatus === 'active' ? !a.isActive : a.isActive) : a.status !== filterStatus) return false;
+    if (filterRM && String(a.rm?.id) !== String(filterRM)) return false;
+    if (filterStatus === 'active' && !a.isActive) return false;
+    if (filterStatus === 'inactive' && a.isActive !== false) return false;
     return true;
   });
 
@@ -93,9 +94,9 @@ export default function AdminRMAssignments() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: 'Total Assignments', val: assignments.length, color: 'bg-blue-50 text-blue-600' },
-            { label: 'Active', val: assignments.filter(a => a.status === 'active').length, color: 'bg-green-50 text-green-600' },
+            { label: 'Active', val: assignments.filter(a => a.isActive === true).length, color: 'bg-green-50 text-green-600' },
             { label: 'Unique RMs', val: new Set(assignments.map(a => a.rm?.id || a.rm_id)).size, color: 'bg-indigo-50 text-indigo-600' },
-            { label: 'Unique Clients', val: new Set(assignments.map(a => a.client?.id || a.client_id)).size, color: 'bg-orange-50 text-orange-600' },
+            { label: 'Unique Clients', val: new Set(assignments.filter(a => a.client?.id).map(a => a.client.id)).size, color: 'bg-orange-50 text-orange-600' },
           ].map(s => (
             <div key={s.label} className={`rounded-xl p-4 ${s.color}`}>
               <div className="text-2xl font-bold">{s.val}</div>

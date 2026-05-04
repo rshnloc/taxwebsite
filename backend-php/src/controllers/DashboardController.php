@@ -14,6 +14,14 @@ class DashboardController {
         $completedApplications = (int)$db->query("SELECT COUNT(*) FROM applications WHERE status = 'completed'")->fetchColumn();
         $totalRevenue = (float)($db->query("SELECT COALESCE(SUM(payment_total), 0) FROM applications WHERE payment_status = 'paid'")->fetchColumn());
 
+        // Partner stats
+        $pendingPartners = (int)$db->query("SELECT COUNT(*) FROM users WHERE role = 'partner' AND partner_status = 'pending_review'")->fetchColumn();
+        $totalPartners   = (int)$db->query("SELECT COUNT(*) FROM users WHERE role = 'partner' AND partner_status = 'approved'")->fetchColumn();
+        $pendingPartnerRequests = 0;
+        try {
+            $pendingPartnerRequests = (int)$db->query("SELECT COUNT(*) FROM partner_service_requests WHERE status = 'submitted'")->fetchColumn();
+        } catch (Throwable $e) {}
+
         // Recent applications
         $stmt = $db->query("SELECT a.*, u.name as client_name, u.email as client_email, s.name as service_name FROM applications a LEFT JOIN users u ON a.client_id = u.id LEFT JOIN services s ON a.service_id = s.id ORDER BY a.created_at DESC LIMIT 10");
         $recentApplications = array_map(fn($a) => [
@@ -47,7 +55,7 @@ class DashboardController {
         $serviceStats = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         jsonResponse([
-            'stats' => compact('totalClients', 'totalEmployees', 'totalApplications', 'pendingApplications', 'inProgressApplications', 'completedApplications', 'totalRevenue'),
+            'stats' => compact('totalClients', 'totalEmployees', 'totalApplications', 'pendingApplications', 'inProgressApplications', 'completedApplications', 'totalRevenue', 'pendingPartners', 'totalPartners', 'pendingPartnerRequests'),
             'monthlyStats' => $monthlyStats,
             'statusDistribution' => $statusDistribution,
             'serviceStats' => $serviceStats,

@@ -2,10 +2,11 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import NotificationBell from '../NotificationBell';
 import {
   LayoutDashboard, Users, FileText, ClipboardList, Settings, LogOut,
-  MessageSquare, Receipt, Bell, BarChart3, Sun, Moon, ChevronLeft,
-  Briefcase, FolderOpen, CreditCard, User, Building2, Shield, UserCheck, Tags
+  MessageSquare, Receipt, BarChart3, Sun, Moon, ChevronLeft,
+  Briefcase, FolderOpen, CreditCard, User, Building2, Shield, UserCheck, Tags, Handshake, CreditCard as CardIcon, TrendingUp, PlusCircle
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -14,11 +15,16 @@ const adminLinks = [
   { href: '/admin/applications', label: 'Applications', icon: FolderOpen },
   { href: '/admin/clients', label: 'Clients', icon: Users },
   { href: '/admin/employees', label: 'Employees', icon: Briefcase },
+  { href: '/admin/partners', label: 'Associates Partners', icon: Handshake },
+  { href: '/admin/partner-requests', label: 'Partner Requests', icon: PlusCircle },
   { href: '/admin/tasks', label: 'Tasks', icon: ClipboardList },
   { href: '/admin/services', label: 'Services', icon: FileText },
   { href: '/admin/document-fields', label: 'Document Fields', icon: Tags },
   { href: '/admin/invoices', label: 'Invoices', icon: Receipt },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/admin/performance', label: 'Performance', icon: TrendingUp },
+  { href: '/admin/payment-accounts', label: 'Payment Accounts', icon: CardIcon },
+  { href: '/admin/partner-invoices', label: 'Partner Invoices', icon: Receipt },
   { href: '/admin/chat', label: 'Messages', icon: MessageSquare },
   { href: '/admin/roles', label: 'Roles & Permissions', icon: Shield },
   { href: '/admin/client-types', label: 'Client Types', icon: Building2 },
@@ -30,6 +36,8 @@ const employeeLinks = [
   { href: '/employee', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/employee/tasks', label: 'My Tasks', icon: ClipboardList },
   { href: '/employee/applications', label: 'Applications', icon: FolderOpen },
+  { href: '/employee/partner-review', label: 'Partner Reviews', icon: Handshake },
+  { href: '/employee/stats', label: 'My Performance', icon: TrendingUp },
   { href: '/employee/chat', label: 'Messages', icon: MessageSquare },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -44,6 +52,16 @@ const clientLinks = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
+const partnerLinks = [
+  { href: '/partner', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/partner/apply', label: 'New Service Request', icon: PlusCircle },
+  { href: '/partner/requests', label: 'My Requests', icon: FolderOpen },
+  { href: '/partner/rate-cards', label: 'Rate Cards', icon: CardIcon },
+  { href: '/partner/invoices', label: 'Invoices', icon: Receipt },
+  { href: '/partner/profile', label: 'My Profile', icon: User },
+  { href: '/settings', label: 'Settings', icon: Settings },
+];
+
 export default function DashboardLayout({ children }) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -53,7 +71,7 @@ export default function DashboardLayout({ children }) {
 
   if (!user) return null;
 
-  const links = user.role === 'admin' ? adminLinks : user.role === 'employee' ? employeeLinks : clientLinks;
+  const links = user.role === 'admin' ? adminLinks : user.role === 'employee' ? employeeLinks : user.role === 'partner' ? partnerLinks : clientLinks;
 
   const Sidebar = ({ mobile = false }) => (
     <aside className={`${mobile ? 'w-72' : collapsed ? 'w-20' : 'w-64'} bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col h-full transition-all duration-300`}>
@@ -152,12 +170,7 @@ export default function DashboardLayout({ children }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href={`${user.role === 'admin' ? '/admin' : user.role === 'employee' ? '/employee' : '/dashboard'}/chat`}
-              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 relative"
-            >
-              <Bell size={20} />
-            </Link>
+            <NotificationBell />
             <Link href="/settings" className="flex items-center gap-2 pl-3 border-l border-slate-200 dark:border-slate-700 hover:opacity-80 transition-opacity">
               <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center overflow-hidden">
                 {user.avatar

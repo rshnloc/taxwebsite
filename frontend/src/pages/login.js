@@ -26,6 +26,7 @@ export default function LoginPage() {
       switch (user.role) {
         case 'admin': router.push('/admin'); break;
         case 'employee': router.push('/employee'); break;
+        case 'partner': router.push('/partner'); break;
         default: router.push('/dashboard');
       }
     } catch (error) {
@@ -123,6 +124,9 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+                <div className="flex justify-end mt-1.5">
+                  <Link href="/forgot-password" className="text-xs text-primary-600 hover:text-primary-700 font-medium">Forgot password?</Link>
+                </div>
               </div>
               <motion.button type="submit" disabled={loading} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
                 className="btn-primary w-full justify-center text-base py-3.5">
@@ -134,6 +138,10 @@ export default function LoginPage() {
               <p className="text-sm text-slate-500">
                 {"Don't have an account? "}
                 <Link href="/register" className="text-primary-600 hover:text-primary-700 font-semibold">Create Account</Link>
+              </p>
+              <p className="text-sm text-center text-slate-600 dark:text-slate-400">
+                Want to partner with us?{' '}
+                <Link href="/register-partner" className="text-primary-600 hover:text-primary-700 font-semibold">Become an Associate</Link>
               </p>
             </div>
           </div>

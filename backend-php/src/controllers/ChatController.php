@@ -49,6 +49,10 @@ class ChatController {
             'id' => $id, '_id' => (string)$id,
             'application' => $app, 'participants' => $participants,
             'lastMessage' => $lastMsg, 'isActive' => (bool)$r['is_active'],
+            'isFlagged' => (bool)($r['is_flagged'] ?? false),
+            'flagReason' => $r['flag_reason'] ?? null,
+            'roomType' => $r['room_type'] ?? 'application',
+            'title' => $r['title'] ?? null,
             'unreadCount' => $unreadCount,
             'createdAt' => $r['created_at'], 'updatedAt' => $r['updated_at'],
         ];
@@ -63,6 +67,17 @@ class ChatController {
             // Admin sees all active rooms
             $stmt = $db->query("SELECT * FROM chat_rooms WHERE is_active = 1 ORDER BY updated_at DESC");
         } else {
+            // Auto-heal: if client, ensure they are participants in any room linked to their applications
+            if ($user['role'] === 'client') {
+                $heal = $db->prepare("
+                    INSERT IGNORE INTO chat_room_participants (room_id, user_id)
+                    SELECT cr.id, a.client_id
+                    FROM chat_rooms cr
+                    JOIN applications a ON cr.application_id = a.id
+                    WHERE a.client_id = ? AND cr.is_active = 1
+                ");
+                $heal->execute([Auth::userId()]);
+            }
             $stmt = $db->prepare("SELECT cr.* FROM chat_rooms cr JOIN chat_room_participants cp ON cr.id = cp.room_id WHERE cp.user_id = ? AND cr.is_active = 1 ORDER BY cr.updated_at DESC");
             $stmt->execute([Auth::userId()]);
         }
@@ -125,9 +140,11 @@ class ChatController {
         $data = getJsonInput();
         $db = getDb();
         $applicationId = $data['applicationId'] ?? null;
-        $participantIds = $data['participantIds'] ?? [];
+        $participantIds = array_map('intval', $data['participantIds'] ?? []);
+        $roomType = $data['roomType'] ?? ($applicationId ? 'application' : 'direct');
+        $title = $data['title'] ?? null;
 
-        // Check existing
+        // For application rooms: return existing if found
         if ($applicationId) {
             $stmt = $db->prepare("SELECT * FROM chat_rooms WHERE application_id = ?");
             $stmt->execute([$applicationId]);
@@ -137,14 +154,34 @@ class ChatController {
             }
         }
 
-        $stmt = $db->prepare("INSERT INTO chat_rooms (application_id) VALUES (?)");
-        $stmt->execute([$applicationId]);
+        // For direct rooms between same 2 users: prevent duplicates
+        if ($roomType === 'direct' && !$applicationId) {
+            $allParticipants = array_unique(array_merge($participantIds, [Auth::userId()]));
+            sort($allParticipants);
+            if (count($allParticipants) === 2) {
+                $existing = $db->prepare("
+                    SELECT cr.* FROM chat_rooms cr
+                    JOIN chat_room_participants p1 ON p1.room_id = cr.id AND p1.user_id = ?
+                    JOIN chat_room_participants p2 ON p2.room_id = cr.id AND p2.user_id = ?
+                    WHERE cr.room_type = 'direct' AND cr.application_id IS NULL
+                    LIMIT 1
+                ");
+                $existing->execute([$allParticipants[0], $allParticipants[1]]);
+                $found = $existing->fetch();
+                if ($found) {
+                    jsonResponse(['room' => self::formatRoom($found, $db)]);
+                }
+            }
+        }
+
+        $stmt = $db->prepare("INSERT INTO chat_rooms (application_id, room_type, title) VALUES (?, ?, ?)");
+        $stmt->execute([$applicationId ?: null, $roomType, $title]);
         $roomId = (int)$db->lastInsertId();
 
         // Add participants
         $allParticipants = array_unique(array_merge($participantIds, [Auth::userId()]));
-        $ins = $db->prepare("INSERT INTO chat_room_participants (room_id, user_id) VALUES (?,?)");
-        foreach ($allParticipants as $uid) { $ins->execute([$roomId, $uid]); }
+        $ins = $db->prepare("INSERT IGNORE INTO chat_room_participants (room_id, user_id) VALUES (?,?)");
+        foreach ($allParticipants as $uid) { $ins->execute([$roomId, (int)$uid]); }
 
         $stmt = $db->prepare("SELECT * FROM chat_rooms WHERE id = ?");
         $stmt->execute([$roomId]);
@@ -238,8 +275,29 @@ class ChatController {
         ]], 201);
     }
 
-    public static function markRoomSeen($roomId) {
-        Auth::protect();
+    // POST /api/chat/rooms/:id/flag  (admin only)
+    public static function flagRoom($roomId) {
+        $user = Auth::protect();
+        if ($user['role'] !== 'admin') jsonResponse(['error' => 'Forbidden'], 403);
+        $db = getDb();
+        $data = getJsonInput();
+
+        $stmt = $db->prepare("SELECT id, is_flagged FROM chat_rooms WHERE id = ?");
+        $stmt->execute([$roomId]);
+        $room = $stmt->fetch();
+        if (!$room) jsonResponse(['error' => 'Room not found'], 404);
+
+        // Toggle or set explicitly
+        $flag = isset($data['flag']) ? (bool)$data['flag'] : !(bool)$room['is_flagged'];
+        $reason = $data['reason'] ?? null;
+
+        $db->prepare("UPDATE chat_rooms SET is_flagged = ?, flag_reason = ? WHERE id = ?")
+           ->execute([$flag ? 1 : 0, $flag ? $reason : null, $roomId]);
+
+        jsonResponse(['flagged' => $flag, 'reason' => $reason]);
+    }
+
+    public static function markRoomSeen($roomId) {        Auth::protect();
         $db = getDb();
         self::ensureParticipant($db, $roomId);
 

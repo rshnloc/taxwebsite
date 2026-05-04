@@ -57,6 +57,14 @@ class Auth {
         }
 
         $GLOBALS['auth_user'] = $user;
+
+        // Track last active timestamp (throttled: only if null or > 2 min old)
+        try {
+            $db->prepare(
+                "UPDATE users SET last_active_at = NOW() WHERE id = ? AND (last_active_at IS NULL OR last_active_at < DATE_SUB(NOW(), INTERVAL 2 MINUTE))"
+            )->execute([$user['id']]);
+        } catch (\Throwable $e) { /* column may not exist yet — ignore until migrate */ }
+
         return $user;
     }
 

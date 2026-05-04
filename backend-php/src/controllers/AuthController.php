@@ -76,6 +76,35 @@ class AuthController {
 
         if (!$user) jsonResponse(['error' => 'Invalid credentials'], 401);
         if (!$user['is_active']) jsonResponse(['error' => 'Account has been deactivated. Contact support.'], 401);
+
+        // Block partner login unless approved
+        if ($user['role'] === 'partner') {
+            $partnerStatus = $user['partner_status'] ?? 'pending_review';
+            if ($partnerStatus === 'pending_review') {
+                jsonResponse(['error' => 'Your application is under review. You will be notified once approved.'], 403);
+            }
+            if (in_array($partnerStatus, ['reviewed', 'needs_update'])) {
+                jsonResponse(['error' => 'Your application is still being processed. Please check your email for updates.'], 403);
+            }
+            if ($partnerStatus === 'rejected') {
+                jsonResponse(['error' => 'Your partner application was not approved. Contact support for details.'], 403);
+            }
+        }
+        
+        // Auto-block employees whose last working day has passed
+        if ($user['role'] === 'employee') {
+            $lwd = $user['last_working_day'] ?? null;
+            $status = $user['employment_status'] ?? 'active';
+            if ($lwd && strtotime($lwd) < strtotime('today') && $status !== 'active') {
+                jsonResponse(['error' => 'Your account has been deactivated due to resignation/termination. Please contact admin.'], 401);
+            }
+            if (in_array($status, ['resigned', 'terminated']) && $lwd && strtotime($lwd) < strtotime('today')) {
+                // Auto deactivate
+                $db->prepare("UPDATE users SET is_active = 0 WHERE id = ?")->execute([$user['id']]);
+                jsonResponse(['error' => 'Your account has been deactivated. Last working day has passed. Contact admin.'], 401);
+            }
+        }
+        
         if (isset($user['is_verified']) && !$user['is_verified'] && $user['role'] === 'client') {
             jsonResponse(['error' => 'Please verify your email first.', 'requiresOtp' => true, 'email' => $user['email']], 403);
         }
@@ -206,17 +235,26 @@ class AuthController {
     public static function forgotPassword() {
         $data = getJsonInput();
         $email = strtolower(trim($data['email'] ?? ''));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) jsonResponse(['error' => 'Valid email is required'], 400);
         $db = getDb();
 
-        $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt = $db->prepare("SELECT id, name FROM users WHERE email = ?");
         $stmt->execute([$email]);
-        if (!$stmt->fetch()) jsonResponse(['error' => 'No account with that email'], 404);
+        $user = $stmt->fetch();
+        if (!$user) jsonResponse(['error' => 'No account found with that email'], 404);
 
         $otp = str_pad(random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
         $db->prepare("UPDATE users SET otp = ?, otp_expiry = DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE email = ?")
            ->execute([$otp, $email]);
 
-        jsonResponse(['message' => 'OTP sent to your email']);
+        try {
+            Mailer::sendPasswordResetEmail($email, $user['name'], $otp);
+        } catch (Throwable $e) {
+            appLog('error', 'Failed to send password reset email', ['email' => $email, 'error' => $e->getMessage()]);
+            jsonResponse(['error' => 'Could not send reset email: ' . $e->getMessage()], 500);
+        }
+        appLog('info', 'Password reset OTP sent', ['email' => $email]);
+        jsonResponse(['message' => 'Password reset OTP sent to your email']);
     }
 
     // POST /api/auth/verify-otp

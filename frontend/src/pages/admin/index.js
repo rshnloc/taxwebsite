@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { StatCard, PageLoading } from '../../components/ui';
 import api from '../../lib/api';
-import { Users, FileText, IndianRupee, Clock, TrendingUp, CheckCircle, AlertCircle, UserPlus } from 'lucide-react';
+import { Users, FileText, IndianRupee, Clock, TrendingUp, CheckCircle, AlertCircle, UserPlus, Handshake, ClipboardList } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
@@ -33,6 +33,9 @@ export default function AdminDashboard() {
     pendingApplications = 0,
     completedApplications = 0,
     totalRevenue = 0,
+    pendingPartners = 0,
+    totalPartners = 0,
+    pendingPartnerRequests = 0,
   } = stats?.stats || {};
 
   const monthlyStats = stats?.monthlyStats || [];
@@ -61,6 +64,39 @@ export default function AdminDashboard() {
           <StatCard icon={UserPlus} label="Employees" value={totalEmployees} color="green" />
           <StatCard icon={AlertCircle} label="In Progress" value={statusDistribution?.find(s => s._id === 'in-progress')?.count || 0} color="yellow" />
           <StatCard icon={TrendingUp} label="This Month" value={monthlyStats?.[monthlyStats.length - 1]?.count || 0} color="purple" />
+        </div>
+
+        {/* Partner Stats Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <a href="/admin/partners" className="card p-5 flex items-center gap-4 hover:ring-2 hover:ring-primary-400 transition-all cursor-pointer">
+            <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
+              <Handshake size={22} className="text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalPartners}</p>
+              <p className="text-sm text-slate-500">Active Associates</p>
+            </div>
+          </a>
+          <a href="/admin/partners?status=pending_review" className="card p-5 flex items-center gap-4 hover:ring-2 hover:ring-yellow-400 transition-all cursor-pointer">
+            <div className="w-12 h-12 rounded-xl bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center flex-shrink-0">
+              <Clock size={22} className="text-yellow-600 dark:text-yellow-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{pendingPartners}</p>
+              <p className="text-sm text-slate-500">Pending Associate Approvals</p>
+              {pendingPartners > 0 && <span className="text-xs text-yellow-600 font-medium">Action required</span>}
+            </div>
+          </a>
+          <a href="/admin/partner-requests" className="card p-5 flex items-center gap-4 hover:ring-2 hover:ring-orange-400 transition-all cursor-pointer">
+            <div className="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center flex-shrink-0">
+              <ClipboardList size={22} className="text-orange-600 dark:text-orange-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{pendingPartnerRequests}</p>
+              <p className="text-sm text-slate-500">Pending Partner Requests</p>
+              {pendingPartnerRequests > 0 && <span className="text-xs text-orange-600 font-medium">Action required</span>}
+            </div>
+          </a>
         </div>
 
         {/* Charts Row */}

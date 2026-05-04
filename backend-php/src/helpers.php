@@ -2,6 +2,58 @@
 /**
  * Helper to format a user row for JSON output (camelCase, nested address)
  */
+
+function formatPartner($p) {
+    if (!$p) return null;
+    return [
+        'id'                => (int)$p['id'],
+        'name'              => $p['name'],
+        'email'             => $p['email'],
+        'phone'             => $p['phone'] ?? '',
+        'firmName'          => $p['company_name'] ?? '',
+        'pan'               => $p['pan'] ?? '',
+        'gst'               => $p['gst'] ?? '',
+        'aadhaar'           => $p['aadhaar'] ?? '',
+        'about'             => $p['partner_about'] ?? '',
+        'city'              => $p['address_city'] ?? '',
+        'state'             => $p['address_state'] ?? '',
+        'avatar'            => $p['avatar'] ?? '',
+        'partnerStatus'     => $p['partner_status'] ?? 'pending_review',
+        'assignedReviewerId'=> isset($p['partner_assigned_reviewer']) ? (int)$p['partner_assigned_reviewer'] : null,
+        'reviewerName'      => $p['reviewer_name'] ?? null,
+        'registeredDate'    => $p['registered_date'] ?? null,
+        'isActive'          => (bool)$p['is_active'],
+        'createdAt'         => $p['created_at'],
+        'updatedAt'         => $p['updated_at'],
+    ];
+}
+
+function formatRateCard($r) {
+    if (!$r) return null;
+    return [
+        'id'             => (int)$r['id'],
+        'partnerId'      => (int)$r['partner_id'],
+        'partnerName'    => $r['partner_name'] ?? null,
+        'partnerEmail'   => $r['partner_email'] ?? null,
+        'serviceId'      => (int)$r['service_id'],
+        'serviceName'    => $r['service_name'] ?? null,
+        'serviceSlug'    => $r['service_slug'] ?? null,
+        'basePrice'      => (float)$r['base_price'],
+        'partnerPrice'   => (float)$r['partner_price'],
+        'commission'     => isset($r['commission']) ? (float)$r['commission'] : null,
+        'marginPercent'  => isset($r['margin_percent']) ? (float)$r['margin_percent'] : null,
+        'effectiveDate'  => $r['effective_date'],
+        'expiryDate'     => $r['expiry_date'] ?? null,
+        'status'         => $r['status'],
+        'partnerFeedback'=> $r['partner_feedback'] ?? null,
+        'notes'          => $r['notes'] ?? null,
+        'createdBy'      => isset($r['created_by']) ? (int)$r['created_by'] : null,
+        'createdByName'  => $r['created_by_name'] ?? null,
+        'createdAt'      => $r['created_at'],
+        'updatedAt'      => $r['updated_at'],
+    ];
+}
+
 function formatUser($u) {
     if (!$u) return null;
     return [
@@ -29,6 +81,13 @@ function formatUser($u) {
         'isActive' => (bool)$u['is_active'],
         'isVerified' => (bool)$u['is_verified'],
         'lastLogin' => $u['last_login'] ?? null,
+        'joiningDate' => $u['joining_date'] ?? null,
+        'dob' => $u['dob'] ?? null,
+        'lastWorkingDay' => $u['last_working_day'] ?? null,
+        'employmentStatus' => $u['employment_status'] ?? 'active',
+        // Partner fields (only present if role=partner)
+        'partnerStatus' => $u['partner_status'] ?? null,
+        'lastActiveAt' => $u['last_active_at'] ?? null,
         'createdAt' => $u['created_at'],
         'updatedAt' => $u['updated_at'],
     ];

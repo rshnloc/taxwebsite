@@ -81,6 +81,9 @@ class ApplicationController {
                 'paidAt' => $a['payment_paid_at'],
             ],
             'dueDate' => $a['due_date'], 'completedAt' => $a['completed_at'],
+            'rating' => $a['rating'] ? (int)$a['rating'] : null,
+            'ratingFeedback' => $a['rating_feedback'],
+            'ratedAt' => $a['rated_at'],
             'createdAt' => $a['created_at'], 'updatedAt' => $a['updated_at'],
         ];
     }
@@ -276,6 +279,58 @@ class ApplicationController {
         $stmt->execute([$id]);
         $a = $stmt->fetch();
         if (!$a) jsonResponse(['error' => 'Application not found'], 404);
+
+        // If assignedEmployee was updated, trigger full assignment side-effects
+        if (isset($data['assignedEmployee']) && $data['assignedEmployee'] && $a['client_id']) {
+            $employeeId = $data['assignedEmployee'];
+
+            // Create/update chat room
+            $existingRoom = $db->prepare("SELECT id FROM chat_rooms WHERE application_id = ?");
+            $existingRoom->execute([$id]);
+            $roomRow = $existingRoom->fetch();
+            if (!$roomRow) {
+                $db->prepare("INSERT INTO chat_rooms (application_id) VALUES (?)")->execute([$id]);
+                $chatRoomId = (int)$db->lastInsertId();
+                $addP = $db->prepare("INSERT IGNORE INTO chat_room_participants (room_id, user_id) VALUES (?,?)");
+                $addP->execute([$chatRoomId, $a['client_id']]);
+                $addP->execute([$chatRoomId, $employeeId]);
+                $db->prepare("INSERT INTO messages (room_id, sender_id, content, type, delivered_at) VALUES (?,?,?,?,NOW())")
+                    ->execute([$chatRoomId, Auth::userId(), 'Chat opened — your CA has been assigned.', 'system']);
+                $db->prepare("UPDATE chat_rooms SET last_message_content=?, last_message_sender_id=?, last_message_timestamp=NOW(), updated_at=NOW() WHERE id=?")
+                    ->execute(['Chat opened — your CA has been assigned.', Auth::userId(), $chatRoomId]);
+            } else {
+                $addP = $db->prepare("INSERT IGNORE INTO chat_room_participants (room_id, user_id) VALUES (?,?)");
+                $addP->execute([$roomRow['id'], $employeeId]);
+                $addP->execute([$roomRow['id'], $a['client_id']]);
+            }
+
+            // Notify employee
+            createNotification($db, $employeeId, 'New Task Assigned', "You have been assigned application {$a['application_id']}", 'task', "/employee/applications/$id", 'in_app', ['applicationId' => (int)$id]);
+
+            // Email client
+            try {
+                $clientStmt = $db->prepare("SELECT name, email FROM users WHERE id = ?");
+                $clientStmt->execute([$a['client_id']]);
+                $clientRow = $clientStmt->fetch();
+                $empStmt = $db->prepare("SELECT name FROM users WHERE id = ?");
+                $empStmt->execute([$employeeId]);
+                $empRow = $empStmt->fetch();
+                if ($clientRow && $clientRow['email'] && $empRow) {
+                    $svcStmt = $db->prepare("SELECT s.name FROM applications ap LEFT JOIN services s ON ap.service_id = s.id WHERE ap.id = ?");
+                    $svcStmt->execute([$id]);
+                    $svcRow = $svcStmt->fetch();
+                    $serviceName = $svcRow['name'] ?? 'your service';
+                    Mailer::sendStatusUpdateEmail(
+                        $clientRow['email'], $clientRow['name'],
+                        $a['application_id'], $a['status'],
+                        "Your application for $serviceName has been assigned to {$empRow['name']}. You can now communicate with your CA via the chat feature."
+                    );
+                }
+            } catch (Throwable $e) {
+                appLog('error', 'Failed to send assignment email', ['appId' => $id, 'error' => $e->getMessage()]);
+            }
+        }
+
         jsonResponse(['application' => self::formatApp($a, $db)]);
     }
 
@@ -304,6 +359,19 @@ class ApplicationController {
 
         // Notify client
         createNotification($db, $a['client_id'], 'Application Update', "Your application {$a['application_id']} status changed to $status", 'application', "/dashboard/applications/$id", 'in_app', ['applicationId' => $id, 'status' => $status]);
+
+        // Notify assigned employee
+        if ($a['assigned_employee_id'] && (int)$a['assigned_employee_id'] !== Auth::userId()) {
+            createNotification($db, $a['assigned_employee_id'], 'Application Updated', "Application {$a['application_id']} status changed to $status", 'application', "/employee/applications/$id", 'in_app', ['applicationId' => $id, 'status' => $status]);
+        }
+
+        // Notify all admins (in-app)
+        if (Auth::user()['role'] !== 'admin') {
+            $adminIds = $db->query("SELECT id FROM users WHERE role = 'admin' AND is_active = 1")->fetchAll();
+            foreach ($adminIds as $adm) {
+                createNotification($db, $adm['id'], 'Application Updated', "Application {$a['application_id']} status changed to $status", 'application', "/admin/applications/$id", 'in_app', ['applicationId' => $id, 'status' => $status]);
+            }
+        }
 
         $clientStmt = $db->prepare("SELECT name, email FROM users WHERE id = ?");
         $clientStmt->execute([$a['client_id']]);
@@ -360,6 +428,19 @@ class ApplicationController {
             }
         }
 
+        // Notify assigned employee about the remark
+        if ($a['assigned_employee_id'] && (int)$a['assigned_employee_id'] !== Auth::userId()) {
+            createNotification($db, $a['assigned_employee_id'], 'Remark Added', "New remark on application {$a['app_ref']}", 'application', "/employee/applications/$id", 'in_app', ['applicationId' => $id]);
+        }
+
+        // Notify admins if remark was added by non-admin
+        if (Auth::user()['role'] !== 'admin') {
+            $adminIds = $db->query("SELECT id FROM users WHERE role = 'admin' AND is_active = 1")->fetchAll();
+            foreach ($adminIds as $adm) {
+                createNotification($db, $adm['id'], 'Remark Added', "New remark on application {$a['app_ref']}", 'application', "/admin/applications/$id", 'in_app', ['applicationId' => $id]);
+            }
+        }
+
         $stmt = $db->prepare("SELECT * FROM applications WHERE id = ?");
         $stmt->execute([$id]);
         jsonResponse(['application' => self::formatApp($stmt->fetch(), $db)]);
@@ -383,7 +464,7 @@ class ApplicationController {
             ->execute([$id, $a['status'], 'Employee assigned', Auth::userId()]);
 
         // Auto-create chat room between client and employee
-        if ($employeeId && isset($a['user_id']) && $a['user_id']) {
+        if ($employeeId && $a['client_id']) {
             $existingRoom = $db->prepare("SELECT id FROM chat_rooms WHERE application_id = ?");
             $existingRoom->execute([$id]);
             $roomRow = $existingRoom->fetch();
@@ -391,16 +472,17 @@ class ApplicationController {
                 $db->prepare("INSERT INTO chat_rooms (application_id) VALUES (?)")->execute([$id]);
                 $chatRoomId = (int)$db->lastInsertId();
                 $addP = $db->prepare("INSERT IGNORE INTO chat_room_participants (room_id, user_id) VALUES (?,?)");
-                $addP->execute([$chatRoomId, $a['user_id']]);
+                $addP->execute([$chatRoomId, $a['client_id']]);
                 $addP->execute([$chatRoomId, $employeeId]);
                 $db->prepare("INSERT INTO messages (room_id, sender_id, content, type, delivered_at) VALUES (?,?,?,?,NOW())")
                     ->execute([$chatRoomId, Auth::userId(), 'Chat opened — your CA has been assigned.', 'system']);
                 $db->prepare("UPDATE chat_rooms SET last_message_content=?, last_message_sender_id=?, last_message_timestamp=NOW(), updated_at=NOW() WHERE id=?")
                     ->execute(['Chat opened — your CA has been assigned.', Auth::userId(), $chatRoomId]);
             } else {
+                // Ensure both client and employee are participants
                 $addP = $db->prepare("INSERT IGNORE INTO chat_room_participants (room_id, user_id) VALUES (?,?)");
                 $addP->execute([$roomRow['id'], $employeeId]);
-                $addP->execute([$roomRow['id'], $a['user_id']]);
+                $addP->execute([$roomRow['id'], $a['client_id']]);
             }
         }
 
@@ -408,10 +490,10 @@ class ApplicationController {
         createNotification($db, $employeeId, 'New Task Assigned', "You have been assigned application {$a['application_id']}", 'task', "/employee/applications/$id", 'in_app', ['applicationId' => $id]);
 
         // Email client about assignment
-        if ($employeeId && isset($a['user_id']) && $a['user_id']) {
+        if ($employeeId && $a['client_id']) {
             try {
                 $clientStmt = $db->prepare("SELECT name, email FROM users WHERE id = ?");
-                $clientStmt->execute([$a['user_id']]);
+                $clientStmt->execute([$a['client_id']]);
                 $clientRow = $clientStmt->fetch();
                 $empStmt = $db->prepare("SELECT name FROM users WHERE id = ?");
                 $empStmt->execute([$employeeId]);
@@ -436,6 +518,82 @@ class ApplicationController {
         $stmt = $db->prepare("SELECT * FROM applications WHERE id = ?");
         $stmt->execute([$id]);
         jsonResponse(['application' => self::formatApp($stmt->fetch(), $db)]);
+    }
+
+    // POST /api/applications/:id/rate  (client only, application must be completed)
+    public static function rateApplication($id) {
+        Auth::protect();
+        $data = getJsonInput();
+        $db = getDb();
+
+        $stmt = $db->prepare("SELECT * FROM applications WHERE id = ?");
+        $stmt->execute([$id]);
+        $a = $stmt->fetch();
+        if (!$a) jsonResponse(['error' => 'Application not found'], 404);
+
+        // Only the client who owns this application can rate
+        if ((int)$a['client_id'] !== Auth::userId()) {
+            jsonResponse(['error' => 'Not authorized'], 403);
+        }
+        if ($a['status'] !== 'completed') {
+            jsonResponse(['error' => 'You can only rate a completed application'], 422);
+        }
+
+        $rating = (int)($data['rating'] ?? 0);
+        if ($rating < 1 || $rating > 5) {
+            jsonResponse(['error' => 'Rating must be between 1 and 5'], 422);
+        }
+        $feedback = trim($data['feedback'] ?? '');
+
+        $db->prepare("UPDATE applications SET rating = ?, rating_feedback = ?, rated_at = NOW() WHERE id = ?")
+           ->execute([$rating, $feedback ?: null, $id]);
+
+        // Notify assigned employee
+        if ($a['assigned_employee_id']) {
+            $stars = str_repeat('★', $rating) . str_repeat('☆', 5 - $rating);
+            createNotification($db, $a['assigned_employee_id'], 'New Rating', "You received a {$rating}-star rating on application {$a['application_id']} $stars", 'task', "/employee/applications/$id", 'in_app', ['applicationId' => (int)$id]);
+        }
+
+        $stmt = $db->prepare("SELECT * FROM applications WHERE id = ?");
+        $stmt->execute([$id]);
+        jsonResponse(['application' => self::formatApp($stmt->fetch(), $db)]);
+    }
+
+    // GET /api/employees/:id/ratings  (admin only)
+    public static function getEmployeeRatings($employeeId) {
+        Auth::protect(); Auth::authorize('admin');
+        $db = getDb();
+
+        $stmt = $db->prepare("
+            SELECT a.id, a.application_id, a.rating, a.rating_feedback, a.rated_at,
+                   u.name AS client_name,
+                   s.name AS service_name
+            FROM applications a
+            LEFT JOIN users u ON u.id = a.client_id
+            LEFT JOIN services s ON s.id = a.service_id
+            WHERE a.assigned_employee_id = ? AND a.rating IS NOT NULL
+            ORDER BY a.rated_at DESC
+        ");
+        $stmt->execute([$employeeId]);
+        $ratings = $stmt->fetchAll();
+
+        $avgStmt = $db->prepare("SELECT AVG(rating) as avg, COUNT(*) as total FROM applications WHERE assigned_employee_id = ? AND rating IS NOT NULL");
+        $avgStmt->execute([$employeeId]);
+        $agg = $avgStmt->fetch();
+
+        jsonResponse([
+            'ratings' => array_map(fn($r) => [
+                '_id' => (string)$r['id'],
+                'applicationId' => $r['application_id'],
+                'rating' => (int)$r['rating'],
+                'feedback' => $r['rating_feedback'],
+                'ratedAt' => $r['rated_at'],
+                'clientName' => $r['client_name'],
+                'serviceName' => $r['service_name'],
+            ], $ratings),
+            'average' => $agg['avg'] ? round((float)$agg['avg'], 1) : null,
+            'total' => (int)$agg['total'],
+        ]);
     }
 
     // POST /api/applications/:id/documents

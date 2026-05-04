@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Send } from 'lucide-react';
+import { Send, User, Briefcase, FolderOpen } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import clsx from 'clsx';
 import api from '../lib/api';
 
-export default function ChatBox({ roomId, otherUser }) {
+export default function ChatBox({ roomId, otherUser, roomInfo, isAdmin }) {
   const { user } = useAuth();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -65,20 +65,58 @@ export default function ChatBox({ roomId, otherUser }) {
     return msg.sender?._id === user?._id || String(msg.sender?._id) === String(user?.id);
   };
 
-  return (
-    <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-      {/* Chat Header */}
-      {otherUser && (
+  // Build header content
+  const headerContent = () => {
+    if (isAdmin && roomInfo) {
+      const { client, employee, appId } = roomInfo;
+      return (
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
+          {/* Title row */}
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            {appId && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 dark:text-primary-300 bg-primary-100 dark:bg-primary-900/40 px-2 py-0.5 rounded-full">
+                <FolderOpen size={11} /> {appId}
+              </span>
+            )}
+            <span className="text-sm font-semibold text-slate-900 dark:text-white">
+              {client?.name || 'Unknown Client'}
+              {employee ? <span className="font-normal text-slate-500"> &amp; {employee.name}</span> : null}
+            </span>
+          </div>
+          {/* Info pills */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <div className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px] font-bold">{client?.name?.charAt(0) || 'C'}</div>
+              <span><span className="text-slate-400">Client:</span> {client?.name || '—'}</span>
+            </div>
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold">{employee?.name?.charAt(0) || '?'}</div>
+              <span><span className="text-slate-400">CA:</span> {employee?.name || <span className="italic text-slate-400">Unassigned</span>}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (otherUser) {
+      return (
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/80">
           <div className="w-10 h-10 rounded-full bg-primary-500 text-white flex items-center justify-center font-semibold text-sm">
             {otherUser.name?.charAt(0).toUpperCase() || '?'}
           </div>
           <div>
             <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{otherUser.name}</h3>
-            <p className="text-xs text-slate-500">{otherUser.role || 'Support'}</p>
+            <p className="text-xs text-slate-500 capitalize">{otherUser.role || 'Support'}</p>
           </div>
         </div>
-      )}
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      {headerContent()}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar" style={{ minHeight: '300px', maxHeight: '500px' }}>
@@ -98,9 +136,14 @@ export default function ChatBox({ roomId, otherUser }) {
                       ? 'bg-primary-500 text-white rounded-br-md'
                       : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-bl-md'
                   )}>
-                    {!isOwnMessage(msg) && (
-                      <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-1">
+                    {(isAdmin || !isOwnMessage(msg)) && (
+                      <p className={clsx('text-xs font-semibold mb-1',
+                        isOwnMessage(msg) ? 'text-primary-100' : 'text-primary-600 dark:text-primary-400'
+                      )}>
                         {msg.sender?.name || 'User'}
+                        {isAdmin && msg.sender?.role && (
+                          <span className="ml-1 font-normal opacity-70 capitalize">({msg.sender.role})</span>
+                        )}
                       </p>
                     )}
                     <p className="whitespace-pre-wrap break-words">{msg.content}</p>
